@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Variables ────────────────────────────────────────────────────────── */
+:root {
+  --sidebar-width: 260px;
+  --topbar-height: 64px;
+  --transition-speed: 200ms;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-dark-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-dark-bg text-white font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  html.light body {
+    @apply bg-light-bg text-gray-900;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-dark-surface; }
+  ::-webkit-scrollbar-thumb { @apply bg-dark-muted rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-primary-600; }
+  html.light ::-webkit-scrollbar-track { @apply bg-light-card; }
+  html.light ::-webkit-scrollbar-thumb { @apply bg-light-muted rounded-full; }
+}
+
+/* ── Components ───────────────────────────────────────────────────────────── */
+@layer components {
+  /* Glass card */
+  .glass-card {
+    @apply bg-dark-card border border-dark-border rounded-2xl;
+    backdrop-filter: blur(12px);
+  }
+  html.light .glass-card {
+    @apply bg-light-surface border-light-border shadow-card-light;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #2b8aff 0%, #0bbdaa 100%);
+  }
+
+  /* Glowing border button */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500
+           text-white font-semibold rounded-xl transition-all duration-200
+           shadow-glow-primary hover:shadow-glow-primary active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-dark-card hover:bg-dark-hover
+           text-white font-semibold rounded-xl border border-dark-border
+           transition-all duration-200 active:scale-95;
+  }
+  html.light .btn-secondary {
+    @apply bg-white hover:bg-light-card text-gray-900 border-light-border;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 text-gray-400 hover:text-white
+           hover:bg-dark-hover rounded-xl transition-all duration-200;
+  }
+  html.light .btn-ghost {
+    @apply text-gray-600 hover:text-gray-900 hover:bg-light-hover;
+  }
+
+  /* Status badges */
+  .badge-safe       { @apply inline-flex items-center gap-1 px-2 py-0.5 bg-safe-500/15 text-safe-500 rounded-md text-xs font-semibold; }
+  .badge-phishing   { @apply inline-flex items-center gap-1 px-2 py-0.5 bg-threat-500/15 text-threat-500 rounded-md text-xs font-semibold; }
+  .badge-malware    { @apply inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500/15 text-orange-400 rounded-md text-xs font-semibold; }
+  .badge-defacement { @apply inline-flex items-center gap-1 px-2 py-0.5 bg-suspicious-500/15 text-suspicious-500 rounded-md text-xs font-semibold; }
+
+  /* Form inputs */
+  .input-field {
+    @apply w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-xl
+           text-white placeholder-gray-500 text-sm
+           focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50
+           transition-colors duration-200;
+  }
+  html.light .input-field {
+    @apply bg-white border-light-border text-gray-900 placeholder-gray-400;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply glass-card p-5 flex flex-col gap-2;
+  }
+
+  /* Sidebar link */
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+           text-gray-400 hover:text-white hover:bg-dark-hover
+           transition-all duration-150 cursor-pointer;
+  }
+  .nav-link.active {
+    @apply text-white bg-primary-600/20 border border-primary-600/30;
+  }
+  html.light .nav-link {
+    @apply text-gray-600 hover:text-gray-900 hover:bg-light-hover;
+  }
+  html.light .nav-link.active {
+    @apply text-primary-700 bg-primary-50 border-primary-200;
+  }
+}
+
+/* ── Utilities ────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .bg-cyber-grid { background-image: var(--tw-background-image); }
+  
+  /* Glow text */
+  .text-glow-primary { text-shadow: 0 0 20px rgba(43, 138, 255, 0.6); }
+  .text-glow-accent  { text-shadow: 0 0 20px rgba(11, 189, 170, 0.6); }
+
+  /* No select */
+  .no-select { user-select: none; }
+
+  /* Cyber grid overlay */
+  .cyber-overlay {
+    background-image: 
+      linear-gradient(rgba(15, 106, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 106, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}

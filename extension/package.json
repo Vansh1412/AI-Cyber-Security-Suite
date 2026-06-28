@@ -1,0 +1,16 @@
+{
+  "name": "ai-cybersecurity-extension",
+  "version": "1.0.0",
+  "description": "AI Cyber Security Suite — Chrome Extension",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.4.5"
+  }
+}

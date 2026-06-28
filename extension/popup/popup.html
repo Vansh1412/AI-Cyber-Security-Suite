@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Cyber Security Suite</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-logo">
+      <img src="../assets/icon32.png" alt="logo" class="logo-img" />
+      <div>
+        <p class="header-title">AI CyberSec Suite</p>
+        <p class="header-sub" id="header-domain">—</p>
+      </div>
+    </div>
+    <button class="icon-btn" id="btn-open-dashboard" title="Open Dashboard">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ── Loading State ────────────────────────────────────────────────── -->
+  <div id="state-loading" class="state-panel hidden">
+    <div class="loading-ring"></div>
+    <p class="loading-text">Scanning website…</p>
+    <p class="loading-sub">Powered by XGBoost + SHAP</p>
+  </div>
+
+  <!-- ── Result State ─────────────────────────────────────────────────── -->
+  <div id="state-result" class="state-panel hidden">
+    <!-- Verdict banner -->
+    <div id="verdict-banner" class="verdict-banner">
+      <div class="verdict-icon-wrap" id="verdict-icon-wrap">
+        <!-- SVG injected by JS -->
+      </div>
+      <div class="verdict-info">
+        <p class="verdict-label" id="verdict-label">—</p>
+        <p class="verdict-sub" id="verdict-sub">—</p>
+      </div>
+      <div class="threat-score-wrap">
+        <svg class="threat-ring" viewBox="0 0 36 36" id="threat-ring-svg">
+          <circle class="ring-bg" cx="18" cy="18" r="15.9" fill="none" stroke-width="3.5"/>
+          <circle class="ring-fg" id="ring-fg" cx="18" cy="18" r="15.9" fill="none" stroke-width="3.5"
+            stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+        </svg>
+        <div class="threat-score-center">
+          <span class="threat-score-val" id="threat-score-val">0</span>
+          <span class="threat-score-label">/100</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics row -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <p class="metric-val" id="metric-conf">—</p>
+        <p class="metric-label">Confidence</p>
+      </div>
+      <div class="metric-divider"></div>
+      <div class="metric-card">
+        <p class="metric-val" id="metric-latency">—</p>
+        <p class="metric-label">Latency</p>
+      </div>
+      <div class="metric-divider"></div>
+      <div class="metric-card">
+        <p class="metric-val" id="metric-cache">—</p>
+        <p class="metric-label">Cache</p>
+      </div>
+    </div>
+
+    <!-- SHAP Reasons -->
+    <div class="reasons-section">
+      <div class="reasons-header">
+        <p class="section-title">Why this result?</p>
+        <div class="shap-loading" id="shap-loading">
+          <div class="shap-spinner"></div>
+          <span>Loading SHAP…</span>
+        </div>
+      </div>
+      <ul class="reasons-list" id="reasons-list">
+        <!-- Injected by JS -->
+      </ul>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="actions-row">
+      <button class="btn-primary" id="btn-view-report">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        View Full Report
+      </button>
+      <button class="btn-secondary" id="btn-rescan">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Rescan
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Offline State ─────────────────────────────────────────────────── -->
+  <div id="state-offline" class="state-panel hidden">
+    <div class="offline-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728m-3.536-3.536a4 4 0 010-5.656M6.343 6.343a9 9 0 000 12.728m3.536-3.536a4 4 0 000-5.656M12 12h.01"/>
+      </svg>
+    </div>
+    <p class="offline-title">AI Service Offline</p>
+    <p class="offline-sub">Cannot reach the backend. Check that the server is running.</p>
+    <button class="btn-primary" id="btn-retry">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Retry
+    </button>
+  </div>
+
+  <!-- ── No Auth Nudge (bottom strip) ─────────────────────────────────── -->
+  <div id="no-auth-strip" class="no-auth-strip hidden">
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+    </svg>
+    <span>Login to save scan history</span>
+    <button id="btn-login-nudge">Sign In →</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

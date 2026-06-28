@@ -1,0 +1,155 @@
+# =============================================================================
+# AI Cyber Security Suite — .gitignore
+# =============================================================================
+
+# ── Python ──────────────────────────────────────────────────────────────────
+**/__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+
+# Virtual Environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── FastAPI / Uvicorn ────────────────────────────────────────────────────────
+*.log
+logs/
+# ── Jupyter / Notebooks ──────────────────────────────────────────────────────
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# ── Node.js / React ──────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.yarn-integrity
+.cache/
+.parcel-cache
+*.tsbuildinfo
+.next/
+.nuxt/
+.vuepress/dist
+.serverless/
+.fusebox/
+
+# ── Environment Variables ────────────────────────────────────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+*.env
+
+# ── Databases & Storage ──────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+*.sql.bak
+postgres-data/
+uploads/
+storage/
+tmp/
+temp/
+
+# ── ML / Data Science ────────────────────────────────────────────────────────
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.zip
+*.tar
+*.gz
+*.7z
+mlruns/
+mlartifacts/
+*.parquet
+datasets/raw/
+datasets/processed/*.csv
+!datasets/processed/.gitkeep
+!datasets/raw/.gitkeep
+
+# ── Generated Reports ────────────────────────────────────────────────────────
+reports/*
+!reports/.gitkeep
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+.docker/
+
+# ── IDE / Editors ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+nosetests.xml
+test-results/
+junit*.xml
+
+# ── Alembic ──────────────────────────────────────────────────────────────────
+backend/migrations/versions/*.pyc
+
+# ── Security ─────────────────────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+
+# ── OS Generated ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini

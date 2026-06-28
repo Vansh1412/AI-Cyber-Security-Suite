@@ -1,0 +1,14 @@
+{
+  "seed": 42,
+  "scale": "100k",
+  "rows": {
+    "train": 69999,
+    "val": 15000,
+    "test": 15000
+  },
+  "checksums": {
+    "train.parquet": "f78bee04179b120621e6c86b9e751080dda4e70018230f6feac82b3938306843",
+    "val.parquet": "f0e3cc80a2cf2814ed6a4f2f223cd857b30029fad8aac44839b504fc5dbfbcf8",
+    "test.parquet": "3960fbbfb87067bd3974615915ea9da8964267616bff7864576593698ae25988"
+  }
+}

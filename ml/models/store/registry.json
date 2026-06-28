@@ -1,0 +1,5 @@
+{
+  "production": "xgboost_calibrated.pkl",
+  "staging": "xgboost_calibrated.pkl",
+  "experimental": "xgboost_calibrated.pkl"
+}

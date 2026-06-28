@@ -1,0 +1,5 @@
+thresholds:
+  defacement: 0.4
+  legitimate: 0.5
+  malware: 0.3
+  phishing: 0.3

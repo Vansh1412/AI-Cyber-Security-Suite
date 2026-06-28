@@ -1,0 +1,32 @@
+training:
+  # Active training scale: 100k | 500k | full
+  dataset: 100k
+  random_seed: 42
+  target_column: label
+  test_size: 0.15
+  val_size: 0.15
+
+  # Features to drop before training (from correlation analysis)
+  drop_features:
+    - hex_char_count     # corr=0.9999 with num_percent (same signal)
+    - consonant_ratio    # corr=0.9973 with vowel_ratio (linearly dependent)
+    - tld                # string column → not directly usable by tree models
+    - file_extension     # string column → not directly usable by tree models
+
+  # Class strategy: multiclass | binary
+  # binary collapses phishing/defacement/malware → 'threat'
+  class_mode: multiclass
+
+mlflow:
+  experiment_name: phishing_detection
+  tracking_uri: auto   # set from src/config.MLFLOW_TRACKING_URI
+
+xgboost:
+  n_trials: 15
+  timeout_seconds: 600
+  cv_folds: 3
+  metric: f1_macro
+
+feature_selection:
+  variance_threshold: 0.0
+  correlation_threshold: 0.98

@@ -1,0 +1,71 @@
+# ==============================================================================
+# AI Cyber Security Suite — Python Dependencies
+# Install: pip install -r requirements.txt
+# ==============================================================================
+
+# ── Data & Utilities ──────────────────────────────────────────────────────────
+pandas
+numpy
+tqdm
+validators
+tabulate
+colorama
+pyyaml
+pyarrow
+
+# ── Machine Learning ──────────────────────────────────────────────────────────
+scikit-learn
+xgboost
+optuna
+shap
+imbalanced-learn
+mlflow
+
+# ── ML: ONNX Export ───────────────────────────────────────────────────────────
+onnx
+onnxruntime
+onnxmltools
+skl2onnx
+
+# ── Visualization ─────────────────────────────────────────────────────────────
+matplotlib
+seaborn
+
+# ── FastAPI Web Framework ─────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+pydantic-settings
+pydantic[email]
+python-multipart
+httpx
+
+# ── Database ──────────────────────────────────────────────────────────────────
+sqlalchemy[asyncio]
+asyncpg
+aiosqlite
+alembic
+
+# ── Authentication ────────────────────────────────────────────────────────────
+passlib[bcrypt]
+python-jose[cryptography]
+
+# ── Caching ───────────────────────────────────────────────────────────────────
+redis[asyncio]
+
+# ── Observability & Monitoring ────────────────────────────────────────────────
+prometheus-fastapi-instrumentator
+structlog
+psutil
+
+# ── Security & Rate Limiting ──────────────────────────────────────────────────
+slowapi
+asgi-correlation-id
+
+# ── OpenTelemetry ─────────────────────────────────────────────────────────────
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest
+pytest-asyncio
