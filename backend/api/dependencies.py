@@ -21,7 +21,6 @@ from backend.database.models import User
 from backend.services.feature_eng import FeatureService
 from backend.services.prediction import PredictionService
 from backend.services.explainer import ExplainerService
-from backend.services.cache import cache_service
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login", auto_error=False)
 

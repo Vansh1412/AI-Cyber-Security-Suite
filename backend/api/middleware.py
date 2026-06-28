@@ -7,7 +7,6 @@ Request timing and CORS middleware.
 import time
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.cors import CORSMiddleware
 
 
 class TimingMiddleware(BaseHTTPMiddleware):

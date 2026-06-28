@@ -63,7 +63,7 @@ def explain_url(
 
     try:
         raw_impacts = expl_svc.explain(df, prediction)
-    except Exception as e:
+    except Exception:
         raw_impacts = []
 
     top_reasons = [

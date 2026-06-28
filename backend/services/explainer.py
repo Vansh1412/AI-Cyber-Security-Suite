@@ -9,7 +9,6 @@ import pandas as pd
 import shap
 from typing import List, Dict
 
-from backend.core.config import settings
 from src.config import MODEL_DIR
 from src.utils.logger import logger
 

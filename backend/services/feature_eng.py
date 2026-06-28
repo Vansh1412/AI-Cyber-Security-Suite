@@ -6,7 +6,7 @@ Service for extracting and validating features.
 
 import json
 import pandas as pd
-from typing import Dict, List
+from typing import List
 
 from backend.core.config import settings
 from ml.features.extractor import FeatureExtractor
