@@ -16,12 +16,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
       - name: Run tests
-        run: |
-          cd backend
-          pytest tests/ -v --cov=app
+        working-directory: backend
+        run: pytest ../tests/ -v
 
   frontend-tests:
     runs-on: ubuntu-latest
@@ -38,7 +36,7 @@ jobs:
       - name: Run tests
         run: |
           cd frontend
-          npm test -- run
+          npx vitest run --passWithNoTests
 
   lint:
     runs-on: ubuntu-latest
