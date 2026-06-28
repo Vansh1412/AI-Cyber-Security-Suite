@@ -318,7 +318,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 Built with ❤️ as a portfolio project demonstrating full-stack AI security engineering.
 
-- GitHub: [@yourusername](https://github.com/yourusername)
+- GitHub: [@yourusername](https://github.com/Vansh1412)
 
 ---
 
