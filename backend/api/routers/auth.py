@@ -10,15 +10,15 @@ GET  /v1/auth/me        — current user profile
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.security import hash_password, verify_password, create_access_token
-from backend.database.models import User
-from backend.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserRead
-from backend.api.dependencies import get_db, get_current_user
+from backend.api.dependencies import get_current_user, get_db
 from backend.core.rate_limit import limiter
+from backend.core.security import create_access_token, hash_password, verify_password
+from backend.database.models import User
+from backend.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserRead
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 

@@ -14,22 +14,22 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Body
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.database.models import ScanResult, User
-from backend.schemas.payload import ScanRequest, ScanResponse
 from backend.api.dependencies import (
     get_db,
-    get_feature_service,
-    get_prediction_service,
     get_explainer_service,
+    get_feature_service,
     get_optional_user,
+    get_prediction_service,
 )
+from backend.database.models import ScanResult, User
+from backend.schemas.payload import ScanRequest, ScanResponse
+from backend.services.cache import cache_service
+from backend.services.explainer import ExplainerService
 from backend.services.feature_eng import FeatureService
 from backend.services.prediction import PredictionService
-from backend.services.explainer import ExplainerService
-from backend.services.cache import cache_service
 from backend.services.threat_intel import threat_intel_service
 
 router = APIRouter()

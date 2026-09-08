@@ -7,13 +7,13 @@ Verifies database, redis, model, and system memory.
 
 import psutil
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import settings
-from backend.services.cache import cache_service
 from backend.api.dependencies import get_db, get_prediction_service
+from backend.core.config import settings
 from backend.core.rate_limit import limiter
+from backend.services.cache import cache_service
 
 router = APIRouter()
 

@@ -7,13 +7,13 @@ GET /v1/stats — Aggregated scan statistics for the current user.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, Date
 
+from backend.api.dependencies import get_current_user, get_db
+from backend.core.rate_limit import limiter
 from backend.database.models import ScanResult, User
 from backend.schemas.payload import StatsResponse
-from backend.api.dependencies import get_db, get_current_user
-from backend.core.rate_limit import limiter
 
 router = APIRouter(prefix="/stats", tags=["Stats"])
 

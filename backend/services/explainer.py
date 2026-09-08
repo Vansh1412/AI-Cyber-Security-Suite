@@ -5,9 +5,9 @@ Service for generating real-time SHAP feature attributions.
 """
 
 import pickle
+
 import pandas as pd
 import shap
-from typing import List, Dict
 
 from src.config import MODEL_DIR
 from src.utils.logger import logger
@@ -30,7 +30,7 @@ class ExplainerService:
             logger.error(f"Failed to initialize ExplainerService: {e}")
             raise RuntimeError("Explainer loading failed.")
 
-    def explain(self, df: pd.DataFrame, predicted_class: str) -> List[Dict]:
+    def explain(self, df: pd.DataFrame, predicted_class: str) -> list[dict]:
         """
         Returns the top 5 features that pushed the prediction towards the predicted class.
         """

@@ -9,6 +9,7 @@ All values can be overridden by environment variables or a .env file.
 from __future__ import annotations
 
 from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
         """Resolve model path via registry."""
         import json
         if self.REGISTRY_PATH.exists():
-            with open(self.REGISTRY_PATH, "r") as f:
+            with open(self.REGISTRY_PATH) as f:
                 registry = json.load(f)
             model_file = registry.get(self.MODEL_ENV, "xgboost_calibrated.pkl")
         else:

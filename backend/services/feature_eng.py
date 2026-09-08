@@ -5,8 +5,8 @@ Service for extracting and validating features.
 """
 
 import json
+
 import pandas as pd
-from typing import List
 
 from backend.core.config import settings
 from ml.features.extractor import FeatureExtractor
@@ -17,8 +17,8 @@ class FeatureService:
     def __init__(self):
         self.extractor = FeatureExtractor()
         
-        with open(settings.SCHEMA_PATH, "r") as f:
-            self.schema: List[str] = json.load(f)["features"]
+        with open(settings.SCHEMA_PATH) as f:
+            self.schema: list[str] = json.load(f)["features"]
             
         logger.info(f"FeatureService initialized with schema of {len(self.schema)} features.")
 

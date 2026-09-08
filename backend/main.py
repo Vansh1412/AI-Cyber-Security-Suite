@@ -11,29 +11,28 @@ Startup:
 
 from contextlib import asynccontextmanager
 
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_fastapi_instrumentator import Instrumentator
-from asgi_correlation_id import CorrelationIdMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from backend.core.config import settings
-from backend.core.rate_limit import limiter
-from backend.core.exceptions import general_exception_handler
-from backend.api.middleware import TimingMiddleware
-from backend.api.routers import health, scan, explain, auth, history, stats, download
 from backend.api.dependencies import (
+    get_explainer_service,
     get_feature_service,
     get_prediction_service,
-    get_explainer_service,
 )
+from backend.api.middleware import TimingMiddleware
+from backend.api.routers import auth, download, explain, health, history, scan, stats
+from backend.core.config import settings
+from backend.core.exceptions import general_exception_handler
+from backend.core.rate_limit import limiter
 from backend.database.session import init_db
 from backend.services.cache import cache_service
 from src.utils.logger import logger
-
 
 
 @asynccontextmanager

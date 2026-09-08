@@ -7,14 +7,14 @@ GET /v1/history/{id}   — single scan detail with SHAP reasons
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.dependencies import get_current_user, get_db
+from backend.core.rate_limit import limiter
 from backend.database.models import ScanResult, User
 from backend.schemas.payload import HistoryItem
-from backend.api.dependencies import get_db, get_current_user
-from backend.core.rate_limit import limiter
 
 router = APIRouter(prefix="/history", tags=["History"])
 

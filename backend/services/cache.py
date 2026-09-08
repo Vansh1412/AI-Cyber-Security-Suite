@@ -9,8 +9,8 @@ of the API continues working without interruption.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 
 import redis.asyncio as aioredis
 

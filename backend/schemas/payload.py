@@ -5,7 +5,6 @@ Pydantic models for API Requests and Responses.
 """
 
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -33,7 +32,7 @@ class ExplainResponse(BaseModel):
     url: str
     prediction: str
     confidence: float
-    top_reasons: List[ExplanationFeature]
+    top_reasons: list[ExplanationFeature]
     latency_ms: float
 
 
@@ -42,9 +41,9 @@ class HistoryItem(BaseModel):
     url: str
     prediction: str
     confidence: float
-    latency_ms: Optional[float]
+    latency_ms: float | None
     cache_hit: bool
-    top_reasons: Optional[list]
+    top_reasons: list | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

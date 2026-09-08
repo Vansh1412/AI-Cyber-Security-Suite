@@ -8,14 +8,19 @@ Returns the same prediction as /scan plus the top reasons
 """
 
 import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from backend.schemas.payload import ScanRequest, ExplainResponse, ExplanationFeature
-from backend.api.dependencies import get_feature_service, get_prediction_service, get_explainer_service
+from backend.api.dependencies import (
+    get_explainer_service,
+    get_feature_service,
+    get_prediction_service,
+)
+from backend.core.rate_limit import limiter
+from backend.schemas.payload import ExplainResponse, ExplanationFeature, ScanRequest
+from backend.services.explainer import ExplainerService
 from backend.services.feature_eng import FeatureService
 from backend.services.prediction import PredictionService
-from backend.services.explainer import ExplainerService
-from backend.core.rate_limit import limiter
 
 router = APIRouter()
 

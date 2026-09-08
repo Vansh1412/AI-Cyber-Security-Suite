@@ -5,10 +5,10 @@ Service for loading the model and making predictions using custom thresholds.
 """
 
 import pickle
-import yaml
+
 import numpy as np
 import pandas as pd
-from typing import Tuple
+import yaml
 
 from backend.core.config import settings
 from src.utils.logger import logger
@@ -30,7 +30,7 @@ class PredictionService:
 
         # 2. Load custom thresholds
         try:
-            with open(settings.CONFIG_PATH, "r") as f:
+            with open(settings.CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f)
                 self.thresholds = cfg.get("thresholds", {})
             logger.info(f"Loaded threshold config: {self.thresholds}")
@@ -38,7 +38,7 @@ class PredictionService:
             logger.warning(f"Failed to load thresholds, falling back to argmax: {e}")
             self.thresholds = {}
 
-    def predict(self, df: pd.DataFrame) -> Tuple[str, float]:
+    def predict(self, df: pd.DataFrame) -> tuple[str, float]:
         """
         Predict class and confidence for a single row DataFrame.
         Applies cascade thresholding if configured.
@@ -62,10 +62,9 @@ class PredictionService:
             conf = probas[idx]
             threshold = self.thresholds.get(cls_name, 0.5)
             
-            if conf >= threshold:
-                if conf > max_malicious_conf:
-                    max_malicious_conf = conf
-                    predicted_class = cls_name
+            if conf >= threshold and conf > max_malicious_conf:
+                max_malicious_conf = conf
+                predicted_class = cls_name
                     
         # If a malicious class crossed its threshold, return it
         if predicted_class:

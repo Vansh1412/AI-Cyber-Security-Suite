@@ -179,8 +179,8 @@ def _heuristic_check(url: str) -> dict | None:
     # ── Rule 6: Hyphenated brand lookalike in hostname ────────────────────────
     # e.g. "paypal-secure.net", "amazon-support.info"
     hostname_plain = hostname.replace("-", "").replace(".", "")
-    for brand in BRAND_DOMAINS:
-        if brand in hostname_plain and not _is_legitimate_domain(hostname, BRAND_DOMAINS[brand]):
+    for brand, legit_domain in BRAND_DOMAINS.items():
+        if brand in hostname_plain and not _is_legitimate_domain(hostname, legit_domain):
             kw_hits = [k for k in PHISHING_KEYWORDS if k in full_url_lower]
             if kw_hits:
                 logger.info("Heuristic [Hyphen-Brand/%s]: %s", brand, url)

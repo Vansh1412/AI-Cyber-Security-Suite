@@ -1,0 +1,17 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "BLE", "SIM", "PLC"]
+ignore = [
+    "B008",    # FastAPI dependency injection Depends(...) in default arguments
+    "BLE001",   # Broad exception catches in top-level handlers/services
+    "E501",    # Line too long (handled by formatter)
+    "PLC0415",  # Top-level import violations (deferred imports to prevent circular dependencies)
+    "B904",    # Exception chaining inside except clause
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["backend", "src", "ml"]

@@ -6,21 +6,21 @@ FastAPI dependency injection — singletons and per-request dependencies.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from functools import lru_cache
-from typing import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.security import decode_access_token
-from backend.database.session import AsyncSessionLocal
 from backend.database.models import User
+from backend.database.session import AsyncSessionLocal
+from backend.services.explainer import ExplainerService
 from backend.services.feature_eng import FeatureService
 from backend.services.prediction import PredictionService
-from backend.services.explainer import ExplainerService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login", auto_error=False)
 
