@@ -121,19 +121,25 @@ export default function Landing() {
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                onClick={() => navigate('/register')}
-                className="btn-primary text-base px-7 py-3"
+              <a
+                href="http://localhost:8000/v1/download/extension"
+                className="btn-primary text-base px-7 py-3 bg-gradient-to-r from-accent-600 to-primary-600 hover:from-accent-500 hover:to-primary-500 shadow-glow-accent flex items-center gap-2"
               >
-                Get Started Free <ArrowRight size={16} />
+                <Zap size={18} className="text-yellow-300 animate-bounce" /> Download Extension (.zip)
+              </a>
+              <button
+                onClick={() => navigate('/scan')}
+                className="btn-secondary text-base px-7 py-3"
+              >
+                Launch Web Dashboard <ArrowRight size={16} />
               </button>
               <a
                 href="https://github.com"
                 target="_blank"
                 rel="noreferrer"
-                className="btn-secondary text-base px-7 py-3"
+                className="btn-ghost text-base px-5 py-3 text-gray-400 hover:text-white"
               >
-                <Github size={16} /> View on GitHub
+                <Github size={16} /> GitHub
               </a>
             </div>
 

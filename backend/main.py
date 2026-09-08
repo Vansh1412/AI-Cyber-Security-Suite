@@ -24,7 +24,7 @@ from backend.core.config import settings
 from backend.core.rate_limit import limiter
 from backend.core.exceptions import general_exception_handler
 from backend.api.middleware import TimingMiddleware
-from backend.api.routers import health, scan, explain, auth, history, stats
+from backend.api.routers import health, scan, explain, auth, history, stats, download
 from backend.api.dependencies import (
     get_feature_service,
     get_prediction_service,
@@ -90,12 +90,13 @@ FastAPIInstrumentor.instrument_app(app)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(health.router,  prefix=settings.API_V1_STR)
-app.include_router(auth.router,    prefix=settings.API_V1_STR)
-app.include_router(scan.router,    prefix=settings.API_V1_STR)
-app.include_router(explain.router, prefix=settings.API_V1_STR)
-app.include_router(history.router, prefix=settings.API_V1_STR)
-app.include_router(stats.router,   prefix=settings.API_V1_STR)
+app.include_router(health.router,   prefix=settings.API_V1_STR)
+app.include_router(auth.router,     prefix=settings.API_V1_STR)
+app.include_router(scan.router,     prefix=settings.API_V1_STR)
+app.include_router(explain.router,  prefix=settings.API_V1_STR)
+app.include_router(history.router,  prefix=settings.API_V1_STR)
+app.include_router(stats.router,    prefix=settings.API_V1_STR)
+app.include_router(download.router, prefix=settings.API_V1_STR)
 
 
 

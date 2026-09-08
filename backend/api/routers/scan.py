@@ -128,30 +128,29 @@ async def scan_url(
     # 4. Cache the result
     await cache_service.set(payload.url, {"prediction": prediction, "confidence": confidence})
 
-    # 5. Persist to DB (only for authenticated users)
-    if current_user:
-        scan = ScanResult(
-            url=payload.url,
-            prediction=prediction,
-            confidence=round(confidence, 4),
-            latency_ms=latency_ms,
-            cache_hit=False,
-            user_id=current_user.id,
-        )
-        db.add(scan)
-        await db.commit()
-        await db.refresh(scan)
+    # 5. Persist to DB (for all users, authenticated or anonymous)
+    scan = ScanResult(
+        url=payload.url,
+        prediction=prediction,
+        confidence=round(confidence, 4),
+        latency_ms=latency_ms,
+        cache_hit=False,
+        user_id=current_user.id if current_user else None,
+    )
+    db.add(scan)
+    await db.commit()
+    await db.refresh(scan)
 
-        # 6. Background SHAP computation (Only if ML was used)
-        if not intel_hit:
-            background_tasks.add_task(
-                _compute_shap_and_store,
-                scan.id,
-                payload.url,
-                prediction,
-                feat_svc,
-                expl_svc,
-            )
+    # 6. Background SHAP computation (Only if ML was used)
+    if not intel_hit:
+        background_tasks.add_task(
+            _compute_shap_and_store,
+            scan.id,
+            payload.url,
+            prediction,
+            feat_svc,
+            expl_svc,
+        )
 
     return ScanResponse(
         url=payload.url,

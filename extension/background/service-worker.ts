@@ -132,6 +132,11 @@ async function handleTabScan(tabId: number, url: string): Promise<void> {
 // ── Tab Listeners ─────────────────────────────────────────────────────────
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (tab.incognito) {
+    console.log(`[CyberSec AI] Bypassing scan for incognito tab #${tabId}`)
+    clearBadge(tabId)
+    return
+  }
   if (changeInfo.status !== 'complete') return
   const url = tab.url ?? changeInfo.url ?? ''
   if (!shouldScan(url)) {
@@ -140,6 +145,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
   handleTabScan(tabId, url)
 })
+
+// Navigation listener for instant response
+if (chrome.webNavigation) {
+  chrome.webNavigation.onCommitted.addListener((details) => {
+    if (details.frameId !== 0) return // Main frame only
+    chrome.tabs.get(details.tabId).then((tab) => {
+      if (tab?.incognito) return
+      if (tab?.url && shouldScan(tab.url)) {
+        handleTabScan(details.tabId, tab.url)
+      }
+    }).catch(() => {})
+  })
+}
 
 // When user switches tabs, restore the badge from cache
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {

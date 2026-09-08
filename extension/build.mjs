@@ -22,6 +22,7 @@ const baseConfig = {
 mkdirSync('dist/background', { recursive: true })
 mkdirSync('dist/popup', { recursive: true })
 mkdirSync('dist/content', { recursive: true })
+mkdirSync('dist/sidepanel', { recursive: true })
 mkdirSync('dist/assets', { recursive: true })
 
 async function build() {
@@ -30,7 +31,6 @@ async function build() {
     ...baseConfig,
     entryPoints: ['background/service-worker.ts'],
     outfile: 'dist/background/service-worker.js',
-    // Service workers cannot be bundled as IIFE in MV3 — use ESM
     format: 'esm',
   })
 
@@ -50,10 +50,20 @@ async function build() {
     format: 'iife',
   })
 
-  // 4. Copy static files
+  // 4. Bundle sidepanel
+  await esbuild.build({
+    ...baseConfig,
+    entryPoints: ['sidepanel/sidepanel.ts'],
+    outfile: 'dist/sidepanel/sidepanel.js',
+    format: 'iife',
+  })
+
+  // 5. Copy static files
   copyFileSync('manifest.json', 'dist/manifest.json')
   copyFileSync('popup/popup.html', 'dist/popup/popup.html')
   copyFileSync('popup/popup.css', 'dist/popup/popup.css')
+  copyFileSync('sidepanel/sidepanel.html', 'dist/sidepanel/sidepanel.html')
+  copyFileSync('sidepanel/sidepanel.css', 'dist/sidepanel/sidepanel.css')
 
   // Copy icons
   if (existsSync('assets')) {

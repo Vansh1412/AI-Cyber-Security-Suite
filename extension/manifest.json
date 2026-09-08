@@ -30,6 +30,9 @@
       "run_at": "document_idle"
     }
   ],
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
   "permissions": [
     "activeTab",
     "tabs",
@@ -37,7 +40,9 @@
     "scripting",
     "notifications",
     "contextMenus",
-    "alarms"
+    "alarms",
+    "sidePanel",
+    "webNavigation"
   ],
   "host_permissions": [
     "http://localhost:8000/*",

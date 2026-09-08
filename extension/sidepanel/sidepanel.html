@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Cyber Security Suite — Live SidePanel</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-icon">🛡️</div>
+        <div>
+          <h1 class="title">CyberSec AI</h1>
+          <p class="subtitle">Live Security Shield</p>
+        </div>
+      </div>
+      <div id="status-pill" class="pill pill-safe">Protected</div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="container">
+      <!-- Active URL Section -->
+      <section class="card active-site-card">
+        <div class="card-header">
+          <span class="card-label">CURRENT WEBSITE</span>
+          <span id="scan-time" class="time-badge">Just now</span>
+        </div>
+        <div id="current-url" class="url-display">https://example.com</div>
+
+        <div id="verdict-banner" class="verdict-banner banner-legitimate">
+          <div class="verdict-icon" id="verdict-icon">✅</div>
+          <div>
+            <div id="verdict-title" class="verdict-title">Legitimate Website</div>
+            <div id="verdict-sub" class="verdict-sub">Confidence: 98.5% · Latency: 12ms</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Threat Factors / SHAP Explainability -->
+      <section class="card">
+        <h2 class="section-title">🧠 AI Risk Explanation</h2>
+        <div id="reasons-list" class="reasons-list">
+          <div class="empty-state">No elevated risk factors detected for this site.</div>
+        </div>
+      </section>
+
+      <!-- Live Traffic Stats -->
+      <section class="card">
+        <h2 class="section-title">📊 Live Session Stats</h2>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div id="stat-scanned" class="stat-val">0</div>
+            <div class="stat-lbl">Sites Checked</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-blocked" class="stat-val text-red">0</div>
+            <div class="stat-lbl">Threats Blocked</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-latency" class="stat-val">--</div>
+            <div class="stat-lbl">Avg Speed</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
