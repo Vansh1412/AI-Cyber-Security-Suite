@@ -5,9 +5,10 @@ POST /v1/scan
 
 - Rate Limiting (SlowAPI)
 - Redis Caching
-- Threat Intelligence Waterfall (Local -> OpenPhish -> VT)
+- Threat Intelligence Waterfall (Local → PhishTank → VirusTotal)
 - ML Model Inference
 - Background SHAP tracking
+- Zero-Day URL logging (Sprint 2)
 """
 
 from __future__ import annotations
@@ -54,6 +55,7 @@ async def _compute_shap_and_store(
 ) -> None:
     """Background task: run SHAP and write top_reasons into DB."""
     from backend.database.session import AsyncSessionLocal
+    from src.utils.logger import logger
     try:
         df = feat_svc.extract_features(url)
         raw = expl_svc.explain(df, prediction)
@@ -66,15 +68,16 @@ async def _compute_shap_and_store(
             if result:
                 result.top_reasons = top_reasons
                 await db.commit()
-    except Exception as e:
-        # Never crash the background task
-        from src.utils.logger import logger
-        logger.error(f"SHAP background task failed: {e}")
+    except (ValueError, RuntimeError, AttributeError) as e:
+        logger.error("SHAP background task failed (model/data error): %s", e)
+    except Exception as e:  # noqa: BLE001
+        # Broad catch intentional — background task must never crash the server
+        logger.error("SHAP background task failed (unexpected): %s", e)
 
 
 @router.post("/scan", response_model=ScanResponse, tags=["Scanning"])
 async def scan_url(
-    request: Request, # Required by SlowAPI
+    request: Request,  # Required by SlowAPI
     background_tasks: BackgroundTasks,
     payload: ScanRequest = Body(...),
     db: AsyncSession = Depends(get_db),
@@ -86,10 +89,11 @@ async def scan_url(
     """
     Scan a URL for phishing, malware, or defacement.
     Passes URLs through a Threat Intelligence waterfall before invoking ML.
+    Newly seen URLs are flagged as zero-day and persisted for active learning.
     """
     # 0. Set state for dynamic rate limiting
     request.state.user = current_user
-    
+
     # We invoke the limiter manually here inside the route, since we need dynamic limits
     limiter = request.app.state.limiter
     limiter._check_request_limit(request, endpoint_name="scan_url", limit_value=limit_by_role(request))
@@ -99,7 +103,7 @@ async def scan_url(
 
     t0 = time.perf_counter()
 
-    # 1. Cache check
+    # 1. Cache check — cache hits are NOT logged as zero-day (already known)
     cached = await cache_service.get(payload.url)
     if cached:
         latency_ms = round((time.perf_counter() - t0) * 1000, 2)
@@ -111,38 +115,50 @@ async def scan_url(
             cache_hit=True,
         )
 
-    # 2. Threat Intelligence Waterfall (Heuristics, Local Blacklist, etc.)
+    # 2. Threat Intelligence Waterfall (Heuristics → PhishTank → VirusTotal)
     intel_hit = await threat_intel_service.check_url(payload.url)
-    
+
+    # ── Sprint 2: Track which layer caught this and whether it's a zero-day ──
+    # A URL is "zero-day" when it passes ALL static intel layers and falls
+    # through to the ML model. The ML result then becomes our prediction.
+    is_zero_day: bool = intel_hit is None
+    source_feed: str | None = intel_hit["source"] if intel_hit else "ml"
+    feature_vector: dict | None = None
+
     if intel_hit:
         prediction = intel_hit["prediction"]
         confidence = intel_hit["confidence"]
-        # No SHAP required for threat intel hits
+        # No SHAP or feature extraction required for threat intel hits
     else:
         # 3. Feature extraction + ML prediction
         df = feat_svc.extract_features(payload.url)
         prediction, confidence = pred_svc.predict(df)
+        # Capture the raw feature dict for active learning / retraining
+        feature_vector = df.iloc[0].to_dict()
 
     latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
     # 4. Cache the result
     await cache_service.set(payload.url, {"prediction": prediction, "confidence": confidence})
 
-    # 5. Persist to DB (for all users, authenticated or anonymous)
+    # 5. Persist to DB — including zero-day signal and feature vector
     scan = ScanResult(
         url=payload.url,
         prediction=prediction,
         confidence=round(confidence, 4),
         latency_ms=latency_ms,
         cache_hit=False,
+        is_zero_day=is_zero_day,
+        feature_vector=feature_vector,
+        source_feed=source_feed,
         user_id=current_user.id if current_user else None,
     )
     db.add(scan)
     await db.commit()
     await db.refresh(scan)
 
-    # 6. Background SHAP computation (Only if ML was used)
-    if not intel_hit:
+    # 6. Background SHAP computation (Only if ML was used — i.e., zero-day)
+    if is_zero_day:
         background_tasks.add_task(
             _compute_shap_and_store,
             scan.id,

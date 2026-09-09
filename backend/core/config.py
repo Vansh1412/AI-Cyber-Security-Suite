@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     CONFIG_PATH: Path = BASE_DIR / "configs" / "model_config.yaml"
     SCHEMA_PATH: Path = BASE_DIR / "ml" / "schema" / "feature_schema.json"
 
+    # ── Sprint 2: Threat Intelligence APIs ───────────────────────────────────
+    # VirusTotal API v3 — get a free key at https://virustotal.com
+    VIRUSTOTAL_API_KEY: str = ""
+    VIRUSTOTAL_TIMEOUT_S: float = 5.0
+    # Maximum number of malicious vendors to flag as a threat (out of 94)
+    VIRUSTOTAL_MALICIOUS_THRESHOLD: int = 3
+
+    # PhishTank — optional API key; works without one but rate-limited
+    PHISHTANK_API_KEY: str = ""
+    # Cache PhishTank database refresh interval (seconds); default 12 hours
+    PHISHTANK_REFRESH_INTERVAL_S: int = 43200
+
     @property
     def MODEL_PATH(self) -> Path:
         """Resolve model path via registry."""

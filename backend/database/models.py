@@ -61,6 +61,14 @@ class ScanResult(Base):
     # SHAP top-reasons stored as JSON; populated by background task
     top_reasons   = Column(JSON, nullable=True)
 
+    # ── Sprint 2: Zero-Day Ingestion Fields ───────────────────────────────────
+    # is_zero_day: True when the URL was not found in local cache/blacklist/feeds
+    is_zero_day   = Column(Boolean, default=False, nullable=False)
+    # feature_vector: raw extracted feature dict for active learning / retraining
+    feature_vector = Column(JSON, nullable=True)
+    # source_feed: which layer caught this — "ml", "heuristic", "virustotal", etc.
+    source_feed   = Column(String(64), nullable=True)
+
     user_id       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at    = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 

@@ -1,22 +1,32 @@
 """
 backend/services/threat_intel.py
 ─────────────────────────────────
-Threat Intelligence Layer.
+Threat Intelligence Layer — Sprint 2 upgrade.
 
 Order of checks (fastest → slowest):
   1. Local hard blacklist        (exact match, 0ms)
   2. Heuristic Rule Engine       (regex + domain logic, 0ms)
-  3. OpenPhish stub
-  4. VirusTotal stub
+  3. PhishTank feed              (in-memory cached daily feed, 0ms after hydration)
+  4. VirusTotal API v3           (async HTTP, ~200–800ms — only if key configured)
+
+Each check returns either:
+  • A threat dict  →  {prediction, confidence, reason, source}
+  • None           →  URL appears clean; continue to next layer / ML
+
+No check throws uncaught exceptions — errors are logged and degraded gracefully.
 """
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import re
+import time
 from urllib.parse import urlparse
 
 import httpx
 
+from backend.core.config import settings
 from src.utils.logger import logger
 
 # ── 1. Hard Blacklist ─────────────────────────────────────────────────────────
@@ -63,7 +73,7 @@ BRAND_DOMAINS: dict[str, str] = {
     "dropbox":   "dropbox.com",
     "linkedin":  "linkedin.com",
     "twitter":   "twitter.com",
-    "wellsfargo":"wellsfargo.com",
+    "wellsfargo": "wellsfargo.com",
     "bankofamerica": "bankofamerica.com",
     "chase":     "chase.com",
     "citibank":  "citibank.com",
@@ -109,6 +119,34 @@ IP_PATTERN = re.compile(
 )
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _threat(prediction: str, confidence: float, reason: str, source: str) -> dict:
+    return {
+        "prediction": prediction,
+        "confidence": confidence,
+        "reason": reason,
+        "source": source,
+    }
+
+
+def _get_tld(hostname: str) -> str:
+    """Return the last two dot-separated parts as the TLD, e.g. '.xyz'"""
+    parts = hostname.split(".")
+    if len(parts) >= 2:
+        return "." + parts[-1]
+    return ""
+
+
+def _is_legitimate_domain(hostname: str, legit_domain: str) -> bool:
+    """
+    Returns True if hostname IS the legitimate domain or a direct subdomain of it.
+    e.g. "www.paypal.com" → True for "paypal.com"
+         "paypal-secure.xyz" → False
+    """
+    return hostname == legit_domain or hostname.endswith("." + legit_domain)
+
+
 def _heuristic_check(url: str) -> dict | None:
     """
     Returns a threat dict if the URL matches heuristic phishing rules,
@@ -130,7 +168,7 @@ def _heuristic_check(url: str) -> dict | None:
     # If it's a legitimate trusted domain (or direct subdomain), it's safe.
     for trusted in TRUSTED_DOMAINS:
         if _is_legitimate_domain(hostname, trusted):
-            return None # Guaranteed clean
+            return None  # Guaranteed clean
 
     # ── Rule 1: IP address as host ────────────────────────────────────────────
     if IP_PATTERN.match(hostname):
@@ -188,44 +226,162 @@ def _heuristic_check(url: str) -> dict | None:
                                f"Hyphenated brand impersonation of '{brand}' with phishing keywords.",
                                f"heuristic:hyphen-brand:{brand}")
 
-    return None  # Looks clean → pass to ML
+    return None  # Looks clean → pass to next layer
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── 4. PhishTank Feed ────────────────────────────────────────────────────────
 
-def _threat(prediction: str, confidence: float, reason: str, source: str) -> dict:
-    return {
-        "prediction": prediction,
-        "confidence": confidence,
-        "reason": reason,
-        "source": source,
-    }
-
-
-def _get_tld(hostname: str) -> str:
-    """Return the last two dot-separated parts as the TLD, e.g. '.xyz'"""
-    parts = hostname.split(".")
-    if len(parts) >= 2:
-        return "." + parts[-1]
-    return ""
-
-
-def _is_legitimate_domain(hostname: str, legit_domain: str) -> bool:
+class PhishTankFeed:
     """
-    Returns True if hostname IS the legitimate domain or a direct subdomain of it.
-    e.g. "www.paypal.com" → True for "paypal.com"
-         "paypal-secure.xyz" → False
+    Maintains an in-memory set of known-phishing URLs sourced from PhishTank.
+    Feed is refreshed asynchronously every PHISHTANK_REFRESH_INTERVAL_S seconds.
+    Falls back gracefully if network is unavailable.
     """
-    return hostname == legit_domain or hostname.endswith("." + legit_domain)
+
+    FEED_URL = "https://data.phishtank.com/data/online-valid.csv"
+
+    def __init__(self) -> None:
+        self._phishing_urls: set[str] = set()
+        self._last_refresh: float = 0.0
+        self._lock = asyncio.Lock()
+
+    def _needs_refresh(self) -> bool:
+        return (time.monotonic() - self._last_refresh) > settings.PHISHTANK_REFRESH_INTERVAL_S
+
+    async def _refresh(self, client: httpx.AsyncClient) -> None:
+        """Download and parse the PhishTank online-valid CSV feed."""
+        async with self._lock:
+            # Re-check inside lock to avoid stampede
+            if not self._needs_refresh():
+                return
+            try:
+                headers: dict[str, str] = {"User-Agent": "phishtank/AI-Cyber-Security-Suite"}
+                if settings.PHISHTANK_API_KEY:
+                    headers["Authorization"] = f"Bearer {settings.PHISHTANK_API_KEY}"
+
+                resp = await client.get(self.FEED_URL, headers=headers, timeout=10.0)
+                resp.raise_for_status()
+
+                # CSV format: index,phish_id,url,phish_detail_url,submission_time,...
+                urls: set[str] = set()
+                for line in resp.text.splitlines()[1:]:  # skip header
+                    parts = line.split(",", 3)
+                    if len(parts) >= 3:
+                        raw_url = parts[2].strip().strip('"')
+                        if raw_url:
+                            urls.add(raw_url)
+
+                self._phishing_urls = urls
+                self._last_refresh = time.monotonic()
+                logger.info("PhishTank feed refreshed: %d entries loaded.", len(urls))
+            except httpx.HTTPError as exc:
+                logger.warning("PhishTank feed refresh failed (HTTP): %s", exc)
+            except Exception as exc:
+                logger.warning("PhishTank feed refresh failed (unexpected): %s", exc)
+
+    async def check(self, url: str, client: httpx.AsyncClient) -> bool:
+        """Return True if the URL is in the PhishTank feed."""
+        if self._needs_refresh():
+            await self._refresh(client)
+        return url in self._phishing_urls
+
+
+_phishtank_feed = PhishTankFeed()
+
+
+# ── 5. VirusTotal API v3 ─────────────────────────────────────────────────────
+
+def _vt_url_id(url: str) -> str:
+    """VirusTotal v3 uses a URL-safe base64 encoding of the URL (no padding)."""
+    return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+
+async def _check_virustotal(url: str, client: httpx.AsyncClient) -> dict | None:
+    """
+    Query VirusTotal API v3 for a URL report.
+    Returns a threat dict if the URL is flagged by ≥ VIRUSTOTAL_MALICIOUS_THRESHOLD vendors.
+    Returns None if clean or if the key is not configured / quota exceeded.
+    """
+    if not settings.VIRUSTOTAL_API_KEY:
+        return None  # No key configured — skip silently
+
+    url_id = _vt_url_id(url)
+    endpoint = f"https://www.virustotal.com/api/v3/urls/{url_id}"
+
+    try:
+        resp = await client.get(
+            endpoint,
+            headers={"x-apikey": settings.VIRUSTOTAL_API_KEY},
+            timeout=settings.VIRUSTOTAL_TIMEOUT_S,
+        )
+
+        if resp.status_code == 404:
+            # URL not yet in VT database — submit it for future analysis (fire-and-forget)
+            asyncio.create_task(_submit_virustotal(url, client))
+            logger.info("VirusTotal: URL not found, submitted for analysis: %s", url)
+            return None
+
+        if resp.status_code == 429:
+            logger.warning("VirusTotal: rate limit hit — skipping for this request.")
+            return None
+
+        resp.raise_for_status()
+        data = resp.json()
+
+        stats: dict = (
+            data.get("data", {})
+            .get("attributes", {})
+            .get("last_analysis_stats", {})
+        )
+        malicious: int = stats.get("malicious", 0)
+        suspicious: int = stats.get("suspicious", 0)
+        total_flagged = malicious + suspicious
+
+        if total_flagged >= settings.VIRUSTOTAL_MALICIOUS_THRESHOLD:
+            logger.info("VirusTotal [Hit]: %s — %d vendors flagged.", url, total_flagged)
+            return _threat(
+                "malware" if malicious > suspicious else "phishing",
+                min(0.99, 0.50 + (total_flagged / 94) * 0.49),
+                f"Flagged as malicious/suspicious by {total_flagged}/94 security vendors on VirusTotal.",
+                "virustotal",
+            )
+
+        logger.debug("VirusTotal [Clean]: %s — %d vendors flagged.", url, total_flagged)
+        return None
+
+    except httpx.TimeoutException:
+        logger.warning("VirusTotal: request timed out for %s", url)
+        return None
+    except httpx.HTTPStatusError as exc:
+        logger.warning("VirusTotal: HTTP %s for %s", exc.response.status_code, url)
+        return None
+    except Exception as exc:
+        logger.warning("VirusTotal: unexpected error for %s: %s", url, exc)
+        return None
+
+
+async def _submit_virustotal(url: str, client: httpx.AsyncClient) -> None:
+    """Submit a new URL to VirusTotal for analysis (best-effort, no return value)."""
+    if not settings.VIRUSTOTAL_API_KEY:
+        return
+    try:
+        await client.post(
+            "https://www.virustotal.com/api/v3/urls",
+            headers={"x-apikey": settings.VIRUSTOTAL_API_KEY},
+            data={"url": url},
+            timeout=5.0,
+        )
+    except Exception as exc:
+        logger.debug("VirusTotal submit failed: %s", exc)
 
 
 # ── Service Class ─────────────────────────────────────────────────────────────
 
 class ThreatIntelService:
-    def __init__(self):
+    def __init__(self) -> None:
         self._client = httpx.AsyncClient(timeout=3.0)
 
-    async def close(self):
+    async def close(self) -> None:
         await self._client.aclose()
 
     async def check_url(self, url: str) -> dict | None:
@@ -234,31 +390,34 @@ class ThreatIntelService:
         Returns a dict with {prediction, confidence, reason, source} if threat found.
         Returns None if clean → ML model should process.
         """
-        # 1. Hard blacklist
+        # ── Layer 1: Hard blacklist (0ms) ─────────────────────────────────────
         if url in LOCAL_BLACKLIST:
             logger.info("ThreatIntel Hit [Local Blacklist]: %s", url)
-            return _threat("phishing", 1.0,
-                           "URL found in high-confidence local blacklist.",
-                           "blacklist")
+            return _threat(
+                "phishing", 1.0,
+                "URL found in high-confidence local blacklist.",
+                "blacklist",
+            )
 
-        # 2. Heuristic rule engine (catches obvious brand phishing, IP hosts, etc.)
+        # ── Layer 2: Heuristic rule engine (0ms) ─────────────────────────────
         heuristic_result = _heuristic_check(url)
         if heuristic_result:
             return heuristic_result
 
-        # 3. OpenPhish Feed (stub — replace with real API call)
-        if "openphish" in url.lower():
-            logger.info("ThreatIntel Hit [OpenPhish]: %s", url)
-            return _threat("phishing", 0.99,
-                           "URL flagged by OpenPhish threat intelligence feed.",
-                           "openphish")
+        # ── Layer 3: PhishTank feed (0ms after hydration) ─────────────────────
+        is_phishtank_hit = await _phishtank_feed.check(url, self._client)
+        if is_phishtank_hit:
+            logger.info("ThreatIntel Hit [PhishTank]: %s", url)
+            return _threat(
+                "phishing", 0.99,
+                "URL found in PhishTank verified phishing database.",
+                "phishtank",
+            )
 
-        # 4. VirusTotal (stub — replace with real API call)
-        if "virustotal" in url.lower():
-            logger.info("ThreatIntel Hit [VirusTotal]: %s", url)
-            return _threat("malware", 0.99,
-                           "Flagged as malicious by 12/94 security vendors on VirusTotal.",
-                           "virustotal")
+        # ── Layer 4: VirusTotal API v3 (async, ~200–800ms) ───────────────────
+        vt_result = await _check_virustotal(url, self._client)
+        if vt_result:
+            return vt_result
 
         # All checks passed → let ML model evaluate
         return None
