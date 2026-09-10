@@ -76,9 +76,13 @@ def _setup_overrides(current_user: User | None = None, current_admin: User | Non
 def test_mlops_retrain_unauthenticated():
     """Verify anonymous request to /v1/mlops/retrain is rejected with 401."""
     async def _test():
+        _setup_overrides()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/v1/mlops/retrain")
-            assert response.status_code == 401
+            try:
+                response = await client.post("/v1/mlops/retrain")
+                assert response.status_code == 401
+            finally:
+                app.dependency_overrides.clear()
 
     asyncio.run(_test())
 

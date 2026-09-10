@@ -36,7 +36,6 @@ from ml.pipelines.retrain import (
     calculate_safety_metrics,
     run_retraining_pipeline,
 )
-from src.config import MODEL_DIR
 
 
 class DummyPickleModel:
@@ -69,6 +68,18 @@ class FailingModelWrapper:
 def _make_dummy_feature_vector(schema: list[str]) -> dict[str, float]:
     """Helper to construct a valid 59-feature vector for testing."""
     return {feat: 1.0 for feat in schema}
+
+
+@pytest.fixture
+def mock_prediction_env(tmp_path, monkeypatch):
+    """Fixture providing an isolated model file environment for PredictionService testing."""
+    valid_file = tmp_path / "xgboost_calibrated.pkl"
+    with open(valid_file, "wb") as f:
+        pickle.dump(DummyPickleModel(), f)
+
+    monkeypatch.setattr("backend.services.prediction.validate_model_path", lambda name: valid_file)
+    monkeypatch.setattr("backend.services.prediction.get_registry", lambda: {})
+    return valid_file
 
 
 # ── P1-1: Exact 59-Feature Schema Enforcement ────────────────────────────────
@@ -309,27 +320,19 @@ def test_validate_model_path_blocks_directory_traversal():
         validate_model_path("subdir/model.pkl")
 
 
-def test_prediction_service_reload_verifies_checksum():
+def test_prediction_service_reload_verifies_checksum(tmp_path, monkeypatch, mock_prediction_env):
     """Verify PredictionService.reload_model rejects artifact when checksum mismatches."""
+    valid_file = mock_prediction_env
     svc = PredictionService()
     svc.model = "existing_champion"
 
-    with (
-        patch(
-            "backend.services.prediction.compute_file_sha256",
-            return_value="valid_actual_hash",
-        ),
-        patch(
-            "backend.services.prediction.validate_model_path",
-            return_value=MODEL_DIR / "xgboost_calibrated.pkl",
-        ),
-        patch(
-            "backend.services.prediction.get_registry",
-            return_value={"artifacts_sha256": {"xgboost_calibrated.pkl": "wrong_hash"}},
-        ),
-    ):
-        svc.reload_model()
-        assert svc.model == "existing_champion"
+    monkeypatch.setattr(
+        "backend.services.prediction.get_registry",
+        lambda: {"artifacts_sha256": {valid_file.name: "wrong_hash"}},
+    )
+
+    svc.reload_model()
+    assert svc.model == "existing_champion"
 
 
 # ── P1-6: Multi-Metric Safety Gates & PR-AUC ──────────────────────────────────
@@ -447,7 +450,7 @@ def test_validate_model_path_windows_and_absolute_traversal():
         validate_model_path("C:\\Windows\\System32\\calc.exe")
 
 
-def test_corrupted_pickle_retains_active_model(tmp_path, monkeypatch):
+def test_corrupted_pickle_retains_active_model(tmp_path, monkeypatch, mock_prediction_env):
     """Stress test 18: Corrupted pickle artifact does not corrupt or replace active model."""
     svc = PredictionService()
     svc.model = "active_champion_model"
@@ -456,14 +459,13 @@ def test_corrupted_pickle_retains_active_model(tmp_path, monkeypatch):
     bad_file.write_bytes(b"NOT_A_VALID_PICKLE_STREAM_GARBAGE_BYTES")
 
     monkeypatch.setattr("backend.services.prediction.validate_model_path", lambda name: bad_file)
-    monkeypatch.setattr("backend.services.prediction.get_registry", lambda: {})
 
     svc.reload_model()
     # Active model reference is preserved
     assert svc.model == "active_champion_model"
 
 
-def test_smoke_test_failure_retains_active_model(tmp_path, monkeypatch):
+def test_smoke_test_failure_retains_active_model(tmp_path, monkeypatch, mock_prediction_env):
     """Stress test 19: Smoke-test prediction failure retains active model without swapping."""
     svc = PredictionService()
     svc.model = "active_champion_model"
@@ -473,7 +475,6 @@ def test_smoke_test_failure_retains_active_model(tmp_path, monkeypatch):
         pickle.dump(FailingModelWrapper(), f)
 
     monkeypatch.setattr("backend.services.prediction.validate_model_path", lambda name: failing_file)
-    monkeypatch.setattr("backend.services.prediction.get_registry", lambda: {})
 
     svc.reload_model()
     assert svc.model == "active_champion_model"
@@ -620,7 +621,15 @@ def test_explainer_checksum_verified_before_unpickling(tmp_path, monkeypatch):
     """Finding 4: ExplainerService rejects model if checksum mismatches."""
     from backend.services.explainer import ExplainerService
 
-    svc = ExplainerService()
+    dummy_file = tmp_path / "xgboost_calibrated.pkl"
+    dummy_file.write_bytes(b"DUMMY_MODEL_BYTES_FOR_CHECKSUM_TEST")
+
+    monkeypatch.setattr("backend.services.explainer.validate_model_path", lambda name: dummy_file)
+
+    svc = object.__new__(ExplainerService)
+    svc.explainer = MagicMock()
+    svc.wrapper = MagicMock()
+    svc.model = MagicMock()
 
     reg_data = {
         "artifacts_sha256": {"xgboost_calibrated.pkl": "mismatched_explainer_hash"}
