@@ -13,8 +13,6 @@ Tests cover:
 
 import urllib.parse
 
-import pytest
-
 from ml.features.lexical import LexicalFeatures
 
 
@@ -28,7 +26,7 @@ def _extract(url: str) -> dict:
 def test_all_features_are_numeric():
     feats = _extract("https://www.example.com/path?q=1")
     for k, v in feats.items():
-        assert isinstance(v, (int, float)), f"Feature '{k}' has unexpected type {type(v)}"
+        assert isinstance(v, int | float), f"Feature '{k}' has unexpected type {type(v)}"
 
 
 def test_feature_count():

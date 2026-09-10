@@ -144,7 +144,7 @@ backend/migrations/versions/*.pyc
 *.p12
 secrets/
 
-# ── OS Generated ─────────────────────────────────────────────────────────────
+# ── OS & Tooling Generated ───────────────────────────────────────────────────
 .DS_Store
 .DS_Store?
 ._*
@@ -153,3 +153,5 @@ secrets/
 ehthumbs.db
 Thumbs.db
 desktop.ini
+.agent/
+get-shit-done-antigravity/

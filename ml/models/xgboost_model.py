@@ -27,7 +27,7 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
-from ml.models.base import BaseModel, compute_metrics, load_feature_list
+from ml.models.base import BaseModel, load_feature_list
 from ml.tracking.mlflow_manager import ExperimentManager
 from src.config import TRAIN_PATH, VAL_PATH
 from src.utils.logger import logger
@@ -76,7 +76,7 @@ class XGBoostModel(BaseModel):
     def build(self):
         return XGBClassifier(**self.params)
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "XGBoostModel":
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> XGBoostModel:
         """Fit with label encoding."""
         if self.model is None:
             self.model = self.build()

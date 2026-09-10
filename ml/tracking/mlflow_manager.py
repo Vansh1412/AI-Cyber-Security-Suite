@@ -25,8 +25,6 @@ MLflow UI
 
 from __future__ import annotations
 
-import hashlib
-import json
 import platform
 import subprocess
 import sys
@@ -83,13 +81,13 @@ class RunContext:
 
     # ── Logging API ────────────────────────────────────────────────────────────
 
-    def log_params(self, params: dict[str, Any]) -> "RunContext":
+    def log_params(self, params: dict[str, Any]) -> RunContext:
         """Log hyperparameters."""
         mlflow.log_params(params)
         logger.info("Params: %s", params)
         return self
 
-    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> "RunContext":
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> RunContext:
         """Log evaluation metrics."""
         mlflow.log_metrics(metrics, step=step)
         for k, v in metrics.items():
@@ -102,7 +100,7 @@ class RunContext:
         y_pred,
         class_names: list[str] | None = None,
         title: str = "Confusion Matrix",
-    ) -> "RunContext":
+    ) -> RunContext:
         """Generate, save, and log a confusion matrix plot."""
         try:
             import matplotlib.pyplot as plt
@@ -138,7 +136,7 @@ class RunContext:
         model=None,
         feature_names: list[str] | None = None,
         top_n: int = 25,
-    ) -> "RunContext":
+    ) -> RunContext:
         """
         Log feature importance as a bar chart and CSV.
 
@@ -149,9 +147,9 @@ class RunContext:
 
             if importance is None and model is not None and feature_names is not None:
                 if hasattr(model, "feature_importances_"):
-                    importance = dict(zip(feature_names, model.feature_importances_))
+                    importance = dict(zip(feature_names, model.feature_importances_, strict=False))
                 elif hasattr(model, "coef_"):
-                    importance = dict(zip(feature_names, np.abs(model.coef_).mean(axis=0)))
+                    importance = dict(zip(feature_names, np.abs(model.coef_).mean(axis=0), strict=False))
 
             if not importance:
                 return self
@@ -218,7 +216,7 @@ class RunContext:
 
         return pkl_path
 
-    def log_tags(self, tags: dict[str, str]) -> "RunContext":
+    def log_tags(self, tags: dict[str, str]) -> RunContext:
         """Log arbitrary string tags."""
         mlflow.set_tags(tags)
         return self

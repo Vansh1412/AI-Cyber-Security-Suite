@@ -59,3 +59,25 @@ async def get_scan_detail(
     if not scan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found.")
     return scan
+
+
+@router.delete("/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def delete_scan(
+    request: Request,
+    scan_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Deletes a scan record from the user's scan history."""
+    result = await db.execute(
+        select(ScanResult).where(
+            ScanResult.id == scan_id,
+            ScanResult.user_id == current_user.id,
+        )
+    )
+    scan = result.scalar_one_or_none()
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found.")
+    await db.delete(scan)
+    await db.commit()

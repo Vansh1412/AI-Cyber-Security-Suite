@@ -6,8 +6,6 @@ Unit tests for ml/features/structural.py — StructuralFeatures.
 
 import urllib.parse
 
-import pytest
-
 from ml.features.structural import StructuralFeatures
 
 
@@ -24,7 +22,7 @@ def test_feature_count():
 def test_all_features_correct_types():
     feats = _extract("https://www.example.com/path")
     for k, v in feats.items():
-        assert isinstance(v, (int, str)), f"'{k}' has unexpected type {type(v)}"
+        assert isinstance(v, int | str), f"'{k}' has unexpected type {type(v)}"
 
 
 # ── TLD ────────────────────────────────────────────────────────────────────────

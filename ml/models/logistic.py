@@ -16,8 +16,8 @@ import sys
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from ml.models.base import BaseModel, load_feature_list
 from ml.tracking.mlflow_manager import ExperimentManager

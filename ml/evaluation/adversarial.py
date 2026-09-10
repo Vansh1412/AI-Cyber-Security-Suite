@@ -6,10 +6,9 @@ Generates adversarial/mutated URLs to test model robustness.
 
 from __future__ import annotations
 
-import sys
 import pickle
+import sys
 import time
-from pathlib import Path
 
 import pandas as pd
 
@@ -52,8 +51,9 @@ def main():
     results = []
     
     # Load feature list schema to ensure ordering
-    from src.config import SELECTED_FEATURES
     import json
+
+    from src.config import SELECTED_FEATURES
     if SELECTED_FEATURES.exists():
         schema = json.loads(SELECTED_FEATURES.read_text())["features"]
     else:

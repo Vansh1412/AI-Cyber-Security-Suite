@@ -75,6 +75,29 @@ async def _compute_shap_and_store(
         logger.error("SHAP background task failed (unexpected): %s", e)
 
 
+async def _verify_and_evaluate_retrain(
+    scan_id: int,
+    url: str,
+    pred_svc: PredictionService,
+    expl_svc: ExplainerService,
+) -> None:
+    """Background task: verify zero-day ground truth and evaluate retraining policy."""
+    from backend.database.session import AsyncSessionLocal
+    from backend.services.learning import (
+        check_and_trigger_autonomous_retraining,
+        learning_service,
+    )
+    from src.utils.logger import logger
+
+    try:
+        async with AsyncSessionLocal() as session:
+            await learning_service.process_and_verify_zero_day_sample(session, scan_id, url)
+        await check_and_trigger_autonomous_retraining(pred_svc=pred_svc, expl_svc=expl_svc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Background zero-day verification failed for scan %s: %s", scan_id, exc)
+
+
+
 @router.post("/scan", response_model=ScanResponse, tags=["Scanning"])
 async def scan_url(
     request: Request,  # Required by SlowAPI
@@ -157,7 +180,7 @@ async def scan_url(
     await db.commit()
     await db.refresh(scan)
 
-    # 6. Background SHAP computation (Only if ML was used — i.e., zero-day)
+    # 6. Background tasks (SHAP computation + Verified zero-day ingestion & retraining)
     if is_zero_day:
         background_tasks.add_task(
             _compute_shap_and_store,
@@ -165,6 +188,13 @@ async def scan_url(
             payload.url,
             prediction,
             feat_svc,
+            expl_svc,
+        )
+        background_tasks.add_task(
+            _verify_and_evaluate_retrain,
+            scan.id,
+            payload.url,
+            pred_svc,
             expl_svc,
         )
 

@@ -25,7 +25,6 @@ import time
 import pandas as pd
 
 from src.config import (
-    FEATURE_STORE_DIR,
     FEATURES_100K,
     FEATURES_500K,
     FEATURES_V1,
