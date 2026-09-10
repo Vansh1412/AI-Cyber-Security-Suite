@@ -13,7 +13,7 @@ export const scanService = {
   },
 
   async getReport(scanId: number): Promise<FullReport> {
-    const res = await api.get(`/v2/report/${scanId}`)
+    const res = await api.get(`/v1/history/${scanId}`)
     return res.data
   },
 

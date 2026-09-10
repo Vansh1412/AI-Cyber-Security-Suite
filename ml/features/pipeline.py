@@ -34,7 +34,7 @@ from tqdm import tqdm
 
 from ml.features.extractor import FeatureExtractor
 from ml.features.validator import FeatureValidator
-from src.config import FEATURES_V1, MERGED_DATASET, REPORT_DIR
+from src.config import FEATURES_V1, MERGED_DATASET
 from src.utils.logger import logger
 
 # ── Default configuration ──────────────────────────────────────────────────────

@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     # Cache PhishTank database refresh interval (seconds); default 12 hours
     PHISHTANK_REFRESH_INTERVAL_S: int = 43200
 
+    # ── Sprint 3: MLOps & Autonomous Retraining ──────────────────────────────
+    RETRAIN_ZERO_DAY_SAMPLE_THRESHOLD: int = 50
+    RETRAIN_MIN_ACCURACY_TARGET: float = 0.90
+    MLOPS_AUTO_PROMOTION: bool = True
+    MLOPS_AUTO_RETRAIN_ENABLED: bool = True
+    RETRAIN_COOLDOWN_HOURS: int = 6
+
+
     @property
     def MODEL_PATH(self) -> Path:
         """Resolve model path via registry."""

@@ -38,13 +38,12 @@ crashing on malformed rows.
 
 from __future__ import annotations
 
-import urllib.parse
 from functools import lru_cache
 from urllib.parse import ParseResult, urlparse
 
-from ml.features.entropy    import shannon_entropy   # noqa: F401 (re-export convenience)
-from ml.features.keywords   import KeywordFeatures
-from ml.features.lexical    import LexicalFeatures
+from ml.features.entropy import shannon_entropy  # noqa: F401 (re-export convenience)
+from ml.features.keywords import KeywordFeatures
+from ml.features.lexical import LexicalFeatures
 from ml.features.statistical import StatisticalFeatures
 from ml.features.structural import StructuralFeatures
 
@@ -100,8 +99,9 @@ class FeatureExtractor:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    @lru_cache(maxsize=10_000)
+    @lru_cache(maxsize=10_000)  # noqa: B019
     def extract(self, url: str) -> dict:
+
         """
         Extract all 64 features from a single URL string.
 
@@ -151,6 +151,6 @@ class FeatureExtractor:
             pass
         # Zero-out all numeric values; keep string defaults
         return {
-            k: (0 if isinstance(v, (int, float)) else ("none" if isinstance(v, str) else v))
+            k: (0 if isinstance(v, int | float) else ("none" if isinstance(v, str) else v))
             for k, v in sample.items()
         }

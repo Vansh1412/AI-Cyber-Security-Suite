@@ -49,7 +49,7 @@ def test_numeric_features_are_numeric(extractor):
     feats = extractor.extract("https://www.example.com/path?q=1")
     for k, v in feats.items():
         if k not in ("tld", "file_extension"):
-            assert isinstance(v, (int, float)), f"'{k}' has type {type(v)}"
+            assert isinstance(v, int | float), f"'{k}' has type {type(v)}"
 
 
 # ── URL normalisation ──────────────────────────────────────────────────────────

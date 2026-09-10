@@ -11,6 +11,7 @@ extractor       : FeatureExtractor — shared instance
 """
 
 import pytest
+
 from ml.features.extractor import FeatureExtractor
 
 

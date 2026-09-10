@@ -8,12 +8,11 @@ Evaluates batch size processing times for the API.
 
 from __future__ import annotations
 
-import sys
 import pickle
+import sys
 import time
-import numpy as np
+
 import pandas as pd
-from pathlib import Path
 
 from ml.features.extractor import FeatureExtractor
 from src.config import MODEL_DIR
@@ -32,8 +31,9 @@ def main():
     with open(model_path, "rb") as f:
         wrapper = pickle.load(f)
 
-    from src.config import SELECTED_FEATURES
     import json
+
+    from src.config import SELECTED_FEATURES
     schema = json.loads(SELECTED_FEATURES.read_text())["features"]
     
     extractor = FeatureExtractor()

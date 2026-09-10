@@ -5,12 +5,11 @@ Unit tests for ml/features/statistical.py — StatisticalFeatures,
 and ml/features/entropy.py — entropy utilities.
 """
 
-import math
 import urllib.parse
 
 import pytest
 
-from ml.features.entropy import shannon_entropy, char_class_entropy
+from ml.features.entropy import shannon_entropy
 from ml.features.statistical import StatisticalFeatures
 
 

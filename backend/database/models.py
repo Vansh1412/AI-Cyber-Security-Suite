@@ -69,6 +69,15 @@ class ScanResult(Base):
     # source_feed: which layer caught this — "ml", "heuristic", "virustotal", etc.
     source_feed   = Column(String(64), nullable=True)
 
+    # ── Sprint 3: Active Learning & Retraining Tracking ──────────────────────
+    is_retrained     = Column(Boolean, default=False, nullable=False, index=True)
+    verified_label   = Column(String(64), nullable=True)
+    label_provenance = Column(String(128), nullable=True)
+    retrain_status   = Column(String(32), default="UNVERIFIED", nullable=False, index=True)
+    retrain_attempt_count = Column(Integer, default=0, nullable=False)
+    last_retrain_attempt  = Column(DateTime(timezone=True), nullable=True)
+    retrained_at     = Column(DateTime(timezone=True), nullable=True)
+
     user_id       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at    = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 

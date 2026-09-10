@@ -8,7 +8,7 @@ import urllib.parse
 
 import pytest
 
-from ml.features.keywords import KeywordFeatures, PHISHING_KEYWORDS
+from ml.features.keywords import PHISHING_KEYWORDS, KeywordFeatures
 
 
 def _extract(url: str) -> dict:

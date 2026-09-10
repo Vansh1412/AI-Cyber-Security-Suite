@@ -26,7 +26,7 @@ from backend.api.dependencies import (
     get_prediction_service,
 )
 from backend.api.middleware import TimingMiddleware
-from backend.api.routers import auth, download, explain, health, history, scan, stats
+from backend.api.routers import auth, download, explain, health, history, mlops, scan, stats
 from backend.core.config import settings
 from backend.core.exceptions import general_exception_handler
 from backend.core.rate_limit import limiter
@@ -96,6 +96,8 @@ app.include_router(explain.router,  prefix=settings.API_V1_STR)
 app.include_router(history.router,  prefix=settings.API_V1_STR)
 app.include_router(stats.router,    prefix=settings.API_V1_STR)
 app.include_router(download.router, prefix=settings.API_V1_STR)
+app.include_router(mlops.router,    prefix=settings.API_V1_STR)
+
 
 
 

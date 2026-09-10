@@ -40,7 +40,7 @@ META_COLS = {"url", "label", "source"}
 
 
 def _load_config() -> dict:
-    with open(TRAINING_CONFIG, "r") as f:
+    with open(TRAINING_CONFIG) as f:
         return yaml.safe_load(f)
 
 
@@ -78,7 +78,7 @@ class FeatureSelector:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def fit(self, df: pd.DataFrame | None = None) -> "FeatureSelector":
+    def fit(self, df: pd.DataFrame | None = None) -> FeatureSelector:
         """
         Fit the selector on a DataFrame (or load from source_path).
 

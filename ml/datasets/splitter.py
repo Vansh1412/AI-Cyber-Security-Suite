@@ -58,7 +58,7 @@ _DATASET_MAP = {
 
 
 def _load_config() -> dict:
-    with open(TRAINING_CONFIG, "r") as f:
+    with open(TRAINING_CONFIG) as f:
         return yaml.safe_load(f)
 
 
@@ -206,7 +206,6 @@ class DatasetSplitter:
         )
 
     def _print_summary(self, train, val, test) -> None:
-        from tabulate import tabulate
         print()
         print("── Dataset Splits ─────────────────────────────────────────────")
         for name, df in [("train", train), ("val", val), ("test", test)]:

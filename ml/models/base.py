@@ -22,7 +22,6 @@ from __future__ import annotations
 import json
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -34,7 +33,7 @@ from src.utils.logger import logger
 
 
 def load_training_config() -> dict:
-    with open(TRAINING_CONFIG, "r") as f:
+    with open(TRAINING_CONFIG) as f:
         return yaml.safe_load(f)
 
 
@@ -131,7 +130,7 @@ class BaseModel(ABC):
 
     # ── Concrete methods ───────────────────────────────────────────────────────
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "BaseModel":
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> BaseModel:
         """Fit the model. Subclasses may override for custom logic."""
         if self.model is None:
             self.model = self.build()

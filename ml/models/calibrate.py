@@ -16,11 +16,8 @@ from __future__ import annotations
 
 import pickle
 import sys
-from pathlib import Path
 
-import onnxmltools
 import pandas as pd
-from onnxmltools.convert.common.data_types import FloatTensorType
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType as SklearnFloatTensorType
 from sklearn.calibration import CalibratedClassifierCV
@@ -87,11 +84,12 @@ def main():
     try:
         # Since calibrator is a scikit-learn object, we use skl2onnx
         # But it contains an xgboost model inside, so we must register the xgboost converter.
-        from onnxmltools.convert import convert_xgboost
+        from onnxmltools.convert.xgboost.operator_converters.XGBoost import (
+            convert_xgboost as convert_xgb_node,
+        )
         from skl2onnx import update_registered_converter
         from skl2onnx.common.shape_calculator import calculate_linear_classifier_output_shapes
         from xgboost import XGBClassifier
-        from onnxmltools.convert.xgboost.operator_converters.XGBoost import convert_xgboost as convert_xgb_node
         
         update_registered_converter(
             XGBClassifier, 

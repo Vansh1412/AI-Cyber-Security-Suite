@@ -31,7 +31,6 @@ from xgboost import XGBClassifier
 
 from ml.models.base import load_feature_list
 from ml.models.xgboost_model import train_and_log
-from ml.tracking.mlflow_manager import ExperimentManager
 from src.config import TRAIN_PATH, TRAINING_CONFIG
 from src.utils.logger import logger
 
@@ -39,7 +38,7 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
 def _load_config() -> dict:
-    with open(TRAINING_CONFIG, "r") as f:
+    with open(TRAINING_CONFIG) as f:
         return yaml.safe_load(f)
 
 

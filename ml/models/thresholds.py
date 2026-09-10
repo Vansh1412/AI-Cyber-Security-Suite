@@ -13,10 +13,8 @@ Usage
 
 from __future__ import annotations
 
-import json
 import pickle
 import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -101,7 +99,7 @@ def main():
     
     # Load existing if present
     if config_path.exists():
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             cfg = yaml.safe_load(f) or {}
     else:
         cfg = {}

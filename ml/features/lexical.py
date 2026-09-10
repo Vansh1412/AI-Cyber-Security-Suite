@@ -37,7 +37,7 @@ def _is_ip_address(hostname: str) -> bool:
         try:
             socket.inet_pton(family, host)
             return True
-        except (socket.error, OSError):
+        except OSError:
             pass
     return False
 

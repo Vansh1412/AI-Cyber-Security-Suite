@@ -14,13 +14,11 @@ Usage
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import shap
-import yaml
 
 from ml.models.base import load_feature_list
 from src.config import MODEL_DIR, REPORT_DIR, TRAIN_PATH
