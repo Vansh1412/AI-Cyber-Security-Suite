@@ -78,6 +78,18 @@ class ScanResult(Base):
     last_retrain_attempt  = Column(DateTime(timezone=True), nullable=True)
     retrained_at     = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Sprint 4: Threat Intelligence Enrichment Fields ──────────────────────
+    # domain_age_days: age of the domain at scan time (from WHOIS)
+    domain_age_days       = Column(Integer, nullable=True)
+    # tls_valid: whether the HTTPS certificate was valid at scan time
+    tls_valid             = Column(Boolean, nullable=True)
+    # redirect_count: number of HTTP redirects followed to reach final URL
+    redirect_count        = Column(Integer, nullable=True)
+    # final_url: landing URL after following redirect chain
+    final_url             = Column(Text, nullable=True)
+    # threat_intel_enrichment: full JSON enrichment blob (WHOIS, TLS, geo, redirects)
+    threat_intel_enrichment = Column(JSON, nullable=True)
+
     user_id       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at    = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 

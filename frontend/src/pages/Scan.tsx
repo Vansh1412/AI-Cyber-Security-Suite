@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Loader2, ShieldCheck, AlertTriangle, Zap, Clock, Wifi,
-  ChevronDown, ChevronUp, Shield
+  ChevronDown, ChevronUp, Shield, Globe, Lock, LockOpen, RefreshCw,
+  MapPin, ArrowRight, BarChart2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { scanService } from '@/services/scan'
-import type { ScanResult, ExplainResult, PredictionClass } from '@/types'
+import type { ScanResult, ExplainResult, PredictionClass, IntelEnrichment } from '@/types'
 import { ThreatGauge } from '@/components/scan/ThreatGauge'
 import { ThreatTimeline } from '@/components/scan/ThreatTimeline'
 import { ShapExplanation } from '@/components/scan/ShapExplanation'
@@ -30,17 +31,47 @@ function threatScore(prediction: string, confidence: number): number {
 
 // ── Scan Page ────────────────────────────────────────────────────────────────
 export default function Scan() {
-  const [url, setUrl]             = useState('')
-  const [scanning, setScanning]   = useState(false)
+  const [url, setUrl]               = useState('')
+  const [scanning, setScanning]     = useState(false)
   const [explaining, setExplaining] = useState(false)
-  const [scan, setScan]           = useState<ScanResult | null>(null)
-  const [explain, setExplain]     = useState<ExplainResult | null>(null)
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [scan, setScan]             = useState<ScanResult | null>(null)
+  const [explain, setExplain]       = useState<ExplainResult | null>(null)
+  const [detailsOpen, setDetailsOpen]   = useState(false)
+  const [intelOpen, setIntelOpen]       = useState(false)
+  const [intel, setIntel]               = useState<IntelEnrichment | null>(null)
+  const [intelLoading, setIntelLoading] = useState(false)
+  const [lastScanId, setLastScanId]     = useState<number | null>(null)
+
+  // Poll for enrichment after scan (enrichment is computed as background task)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollEnrichment = (scanId: number) => {
+    let attempts = 0
+    const MAX = 12  // poll up to ~60 seconds
+    pollRef.current = setInterval(async () => {
+      attempts++
+      try {
+        const data = await scanService.getIntelEnrichment(scanId)
+        // Enrichment ready when domain_age_days or tls_info is non-null
+        if (data.domain_age_days !== null || data.tls_info !== null || attempts >= MAX) {
+          setIntel(data)
+          setIntelLoading(false)
+          clearInterval(pollRef.current!)
+        }
+      } catch {
+        if (attempts >= MAX) {
+          setIntelLoading(false)
+          clearInterval(pollRef.current!)
+        }
+      }
+    }, 5000)
+  }
 
   const handleScan = async () => {
     const trimmed = url.trim()
     if (!trimmed) { toast.error('Please enter a URL.'); return }
     setScanning(true); setScan(null); setExplain(null)
+    setIntel(null); setLastScanId(null); setIntelLoading(false)
+    if (pollRef.current) clearInterval(pollRef.current)
     try {
       const data = await scanService.scanUrl(trimmed)
       setScan(data)
@@ -50,12 +81,40 @@ export default function Scan() {
         .then(e => setExplain(e))
         .catch(() => {}) // graceful — SHAP may time out
         .finally(() => setExplaining(false))
+
+      // Sprint 4: After scan try to get scan ID from history for on-demand actions
+      try {
+        const history = await scanService.getHistory(1, 1)
+        if (history.length > 0 && history[0].url === data.url) {
+          setLastScanId(history[0].id)
+        }
+      } catch { /* fail-open */ }
+
     } catch (err: any) {
       const detail = err?.response?.data?.detail
       const errMsg = Array.isArray(detail) ? detail[0]?.msg : detail
       toast.error(typeof errMsg === 'string' ? errMsg : 'Scan failed. Is the API running?')
     } finally {
       setScanning(false)
+    }
+  }
+
+  const handleEnrich = async () => {
+    if (!lastScanId) {
+      toast.error('Scan ID unavailable for enrichment.')
+      return
+    }
+    setIntelLoading(true)
+    setIntelOpen(true)
+    try {
+      const res = await scanService.triggerEnrichment(lastScanId)
+      setIntel(res)
+      toast.success('Threat intelligence enrichment completed.')
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      toast.error(typeof detail === 'string' ? detail : 'Enrichment failed.')
+    } finally {
+      setIntelLoading(false)
     }
   }
 
@@ -212,7 +271,135 @@ export default function Scan() {
               {/* Divider */}
               <div className="my-6 border-t border-dark-border" />
 
-              {/* Export */}
+              {/* Sprint 4: Intel Enrichment Panel */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={() => setIntelOpen(!intelOpen)}
+                    className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
+                  >
+                    <Globe size={13} className="text-accent-400" />
+                    <span className="font-medium">Threat Intelligence Enrichment</span>
+                    {intel?.status && (
+                      <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-bold uppercase', {
+                        'bg-safe-500/20 text-safe-400': intel.status === 'completed',
+                        'bg-threat-500/20 text-threat-400': intel.status === 'blocked',
+                        'bg-gray-700 text-gray-400': intel.status === 'pending',
+                      })}>
+                        {intel.status}
+                      </span>
+                    )}
+                    {intelOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+
+                  {!intel && lastScanId && (
+                    <button
+                      onClick={handleEnrich}
+                      disabled={intelLoading}
+                      className="btn-ghost text-xs flex items-center gap-1.5 py-1 px-2.5 text-accent-400 border border-accent-500/30 hover:border-accent-400"
+                    >
+                      {intelLoading ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
+                      {intelLoading ? 'Enriching...' : 'Enrich Threat Intel'}
+                    </button>
+                  )}
+                </div>
+
+                <AnimatePresence>
+                  {intelOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      {intelLoading && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+                          <Loader2 size={12} className="animate-spin text-accent-400" />
+                          Running on-demand threat intelligence enrichment (WHOIS, TLS, redirects)...
+                        </div>
+                      )}
+                      {intel && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                          {/* Domain Age */}
+                          <div className="p-3 rounded-xl bg-dark-bg/50 border border-dark-border">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Globe size={11} className="text-gray-500" />
+                              <p className="text-xs text-gray-500">Domain Age</p>
+                            </div>
+                            <p className="text-sm font-bold text-white">
+                              {intel.domain_age_days !== null
+                                ? intel.domain_age_days < 30
+                                  ? <span className="text-threat-500">{intel.domain_age_days}d ⚠️</span>
+                                  : `${Math.floor(intel.domain_age_days / 365)}y ${Math.floor((intel.domain_age_days % 365) / 30)}m`
+                                : <span className="text-gray-500">Unknown</span>
+                              }
+                            </p>
+                          </div>
+
+                          {/* TLS */}
+                          <div className="p-3 rounded-xl bg-dark-bg/50 border border-dark-border">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              {intel.tls_info?.valid
+                                ? <Lock size={11} className="text-safe-500" />
+                                : <LockOpen size={11} className="text-threat-500" />
+                              }
+                              <p className="text-xs text-gray-500">TLS Certificate</p>
+                            </div>
+                            <p className={clsx('text-sm font-bold',
+                              intel.tls_info?.valid ? 'text-safe-500' : 'text-threat-500'
+                            )}>
+                              {intel.tls_info?.valid ? 'Valid' :
+                                intel.tls_info === null ? <span className="text-gray-500">HTTP</span> :
+                                'Invalid'}
+                            </p>
+                            {intel.tls_info?.days_to_expiry !== null && intel.tls_info?.days_to_expiry !== undefined && (
+                              <p className="text-xs text-gray-600 mt-0.5">Expires in {intel.tls_info.days_to_expiry}d</p>
+                            )}
+                          </div>
+
+                          {/* Redirects */}
+                          <div className="p-3 rounded-xl bg-dark-bg/50 border border-dark-border">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <RefreshCw size={11} className="text-gray-500" />
+                              <p className="text-xs text-gray-500">Redirects</p>
+                            </div>
+                            <p className={clsx('text-sm font-bold',
+                              intel.redirect_count > 2 ? 'text-suspicious-500' : 'text-white'
+                            )}>
+                              {intel.redirect_count}
+                            </p>
+                            {intel.final_url && intel.final_url !== scan?.url && (
+                              <p className="text-xs text-gray-600 mt-0.5 truncate">→ {intel.final_url}</p>
+                            )}
+                          </div>
+
+                          {/* Geolocation */}
+                          <div className="p-3 rounded-xl bg-dark-bg/50 border border-dark-border">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <MapPin size={11} className="text-gray-500" />
+                              <p className="text-xs text-gray-500">Location</p>
+                            </div>
+                            <p className="text-sm font-bold text-white">
+                              {intel.geolocation?.country ?? <span className="text-gray-500">Unknown</span>}
+                            </p>
+                            {intel.geolocation?.org && (
+                              <p className="text-xs text-gray-600 mt-0.5 truncate">{intel.geolocation.org}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {!intel && !intelLoading && (
+                        <p className="text-xs text-gray-600">Enrichment not yet available. Try again in a moment.</p>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Divider */}
+              <div className="my-6 border-t border-dark-border" />
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <ReportExporter
                   url={scan.url}
@@ -245,7 +432,7 @@ export default function Scan() {
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
                         { label: 'Model',         value: 'XGBoost v1.4 (Calibrated)' },
-                        { label: 'Schema',         value: 'v1.0 — 63 features' },
+                        { label: 'Schema',         value: 'v1.0 — 59 Canonical Features' },
                         { label: 'API Version',    value: 'v2' },
                         { label: 'Latency',        value: `${scan.latency_ms.toFixed(2)}ms` },
                         { label: 'Cache',          value: scan.cache_hit ? 'HIT' : 'MISS' },

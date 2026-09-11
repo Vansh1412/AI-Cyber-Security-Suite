@@ -66,6 +66,9 @@ opentelemetry-api
 opentelemetry-sdk
 opentelemetry-instrumentation-fastapi
 
+# ── Threat Intelligence Enrichment (Sprint 4) ─────────────────────────────────
+python-whois>=0.9.4
+
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest
 pytest-asyncio

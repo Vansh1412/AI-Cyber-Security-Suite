@@ -2,16 +2,17 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, Search, History, BarChart3, User,
-  Settings, Shield, LogOut, ShieldAlert, ChevronRight,
+  Settings, Shield, LogOut, ShieldAlert, ChevronRight, Crosshair,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { clsx } from 'clsx'
 
 const navItems = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
-  { to: '/scan',       icon: Search,           label: 'Scan URL'   },
-  { to: '/history',    icon: History,          label: 'History'    },
-  { to: '/analytics',  icon: BarChart3,        label: 'Analytics'  },
+  { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'     },
+  { to: '/scan',        icon: Search,          label: 'Scan URL'      },
+  { to: '/history',     icon: History,         label: 'History'       },
+  { to: '/analytics',   icon: BarChart3,       label: 'Analytics'     },
+  { to: '/investigate', icon: Crosshair,       label: 'Investigate'   },
 ]
 
 const bottomItems = [

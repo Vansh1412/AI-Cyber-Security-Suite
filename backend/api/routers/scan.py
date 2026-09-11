@@ -180,7 +180,7 @@ async def scan_url(
     await db.commit()
     await db.refresh(scan)
 
-    # 6. Background tasks (SHAP computation + Verified zero-day ingestion & retraining)
+    # 6. Background tasks (SHAP + zero-day ingestion)
     if is_zero_day:
         background_tasks.add_task(
             _compute_shap_and_store,
