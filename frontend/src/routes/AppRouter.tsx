@@ -6,13 +6,14 @@ import { ProtectedRoute, AdminRoute } from './ProtectedRoute'
 const Landing   = lazy(() => import('@/pages/Landing'))
 const Login     = lazy(() => import('@/pages/Login'))
 const Register  = lazy(() => import('@/pages/Register'))
-const Dashboard = lazy(() => import('@/pages/Dashboard'))
-const Scan      = lazy(() => import('@/pages/Scan'))
-const History   = lazy(() => import('@/pages/History'))
-const Analytics = lazy(() => import('@/pages/Analytics'))
-const Profile   = lazy(() => import('@/pages/Profile'))
-const Settings  = lazy(() => import('@/pages/Settings'))
-const Admin     = lazy(() => import('@/pages/Admin'))
+const Dashboard             = lazy(() => import('@/pages/Dashboard'))
+const Scan                  = lazy(() => import('@/pages/Scan'))
+const History               = lazy(() => import('@/pages/History'))
+const Analytics             = lazy(() => import('@/pages/Analytics'))
+const Profile               = lazy(() => import('@/pages/Profile'))
+const Settings              = lazy(() => import('@/pages/Settings'))
+const Admin                 = lazy(() => import('@/pages/Admin'))
+const ThreatInvestigation   = lazy(() => import('@/pages/ThreatInvestigation'))
 
 function PageLoader() {
   return (
@@ -33,12 +34,13 @@ export function AppRouter() {
 
         {/* Protected (requires auth) */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard"  element={<Dashboard />} />
-          <Route path="/scan"       element={<Scan />}      />
-          <Route path="/history"    element={<History />}   />
-          <Route path="/analytics"  element={<Analytics />} />
-          <Route path="/profile"    element={<Profile />}   />
-          <Route path="/settings"   element={<Settings />}  />
+          <Route path="/dashboard"    element={<Dashboard />}           />
+          <Route path="/scan"         element={<Scan />}                />
+          <Route path="/history"      element={<History />}             />
+          <Route path="/analytics"    element={<Analytics />}           />
+          <Route path="/investigate"  element={<ThreatInvestigation />} />
+          <Route path="/profile"      element={<Profile />}             />
+          <Route path="/settings"     element={<Settings />}            />
           {/* Admin only */}
           <Route element={<AdminRoute />}>
             <Route path="/admin" element={<Admin />} />

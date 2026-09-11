@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     MLOPS_AUTO_RETRAIN_ENABLED: bool = True
     RETRAIN_COOLDOWN_HOURS: int = 6
 
+    # ── Sprint 4: Threat Intelligence Enrichment ─────────────────────────────
+    # ipinfo.io API key — optional; fail-open if empty (limited free tier without key)
+    IPINFO_API_KEY: str = ""
+
+
 
     @property
     def MODEL_PATH(self) -> Path:

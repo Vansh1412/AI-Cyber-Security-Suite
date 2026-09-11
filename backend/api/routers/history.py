@@ -12,9 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.dependencies import get_current_user, get_db
+from backend.core.config import settings
 from backend.core.rate_limit import limiter
 from backend.database.models import ScanResult, User
-from backend.schemas.payload import HistoryItem
+from backend.schemas.payload import FullReport, HistoryItem, _compute_threat_score
 
 router = APIRouter(prefix="/history", tags=["History"])
 
@@ -40,7 +41,7 @@ async def get_history(
     return result.scalars().all()
 
 
-@router.get("/{scan_id}", response_model=HistoryItem)
+@router.get("/{scan_id}", response_model=FullReport)
 @limiter.limit("60/minute")
 async def get_scan_detail(
     request: Request,
@@ -48,7 +49,7 @@ async def get_scan_detail(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Returns full detail of a single scan including SHAP top_reasons."""
+    """Returns full detail of a single scan including SHAP top_reasons and Sprint 4 enrichment summary."""
     result = await db.execute(
         select(ScanResult).where(
             ScanResult.id == scan_id,
@@ -58,7 +59,14 @@ async def get_scan_detail(
     scan = result.scalar_one_or_none()
     if not scan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found.")
-    return scan
+
+    # Build FullReport with computed threat_score and model_env
+    base = HistoryItem.model_validate(scan)
+    return FullReport(
+        **base.model_dump(),
+        threat_score=_compute_threat_score(scan.prediction, scan.confidence),
+        model_env=settings.MODEL_ENV,
+    )
 
 
 @router.delete("/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -26,7 +26,19 @@ from backend.api.dependencies import (
     get_prediction_service,
 )
 from backend.api.middleware import TimingMiddleware
-from backend.api.routers import auth, download, explain, health, history, mlops, scan, stats
+from backend.api.routers import (
+    analytics,
+    auth,
+    download,
+    explain,
+    health,
+    history,
+    intel,
+    investigate,
+    mlops,
+    scan,
+    stats,
+)
 from backend.core.config import settings
 from backend.core.exceptions import general_exception_handler
 from backend.core.rate_limit import limiter
@@ -89,14 +101,18 @@ FastAPIInstrumentor.instrument_app(app)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(health.router,   prefix=settings.API_V1_STR)
-app.include_router(auth.router,     prefix=settings.API_V1_STR)
-app.include_router(scan.router,     prefix=settings.API_V1_STR)
-app.include_router(explain.router,  prefix=settings.API_V1_STR)
-app.include_router(history.router,  prefix=settings.API_V1_STR)
-app.include_router(stats.router,    prefix=settings.API_V1_STR)
-app.include_router(download.router, prefix=settings.API_V1_STR)
-app.include_router(mlops.router,    prefix=settings.API_V1_STR)
+app.include_router(health.router,       prefix=settings.API_V1_STR)
+app.include_router(auth.router,         prefix=settings.API_V1_STR)
+app.include_router(scan.router,         prefix=settings.API_V1_STR)
+app.include_router(explain.router,      prefix=settings.API_V1_STR)
+app.include_router(history.router,      prefix=settings.API_V1_STR)
+app.include_router(stats.router,        prefix=settings.API_V1_STR)
+app.include_router(download.router,     prefix=settings.API_V1_STR)
+app.include_router(mlops.router,        prefix=settings.API_V1_STR)
+# Sprint 4 routers
+app.include_router(intel.router,        prefix=settings.API_V1_STR)
+app.include_router(analytics.router,    prefix=settings.API_V1_STR)
+app.include_router(investigate.router,  prefix=settings.API_V1_STR)
 
 
 
