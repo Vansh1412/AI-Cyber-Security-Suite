@@ -190,7 +190,7 @@ def test_global_analytics_admin_only_allows_admin():
 def test_global_analytics_forbidden_for_standard_user():
     async def _test():
         user = _make_user()
-        _setup(user=user, db=_mock_db_empty())
+        _setup(user=user, db=_mock_db_empty(), pred_svc=_mock_prediction_service())
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/v1/analytics/global")
@@ -376,7 +376,9 @@ def test_deep_report_returns_exactly_59_canonical_features():
 def test_bulk_scan_rejects_more_than_20_urls():
     async def _test():
         user = _make_user()
-        _setup(user=user)
+        feat_svc = _mock_feature_service()
+        pred_svc = _mock_prediction_service()
+        _setup(user=user, feat_svc=feat_svc, pred_svc=pred_svc)
 
         urls = [f"https://test{i}.com" for i in range(21)]
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
