@@ -37,6 +37,7 @@ from backend.api.routers import (
     intel,
     investigate,
     mlops,
+    monitor,
     scan,
     stats,
 )
@@ -116,6 +117,8 @@ app.include_router(analytics.router,    prefix=settings.API_V1_STR)
 app.include_router(investigate.router,  prefix=settings.API_V1_STR)
 # Sprint 5 Phase 4 router
 app.include_router(incidents.router,    prefix=settings.API_V1_STR)
+# Sprint 5 Phase 5A router
+app.include_router(monitor.router,      prefix=settings.API_V1_STR)
 
 
 
