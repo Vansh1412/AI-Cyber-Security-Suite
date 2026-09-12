@@ -24,6 +24,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.dependencies import get_current_user, get_db
 from backend.core.rate_limit import limiter
 from backend.database.models import User
+from backend.schemas.alerts import (
+    CheckNowResponse,
+    MonitoringStatsResponse,
+    MonitoringTargetDiagnosticsResponse,
+)
 from backend.schemas.monitor import (
     MonitoringTargetCreate,
     MonitoringTargetListResponse,
@@ -32,20 +37,23 @@ from backend.schemas.monitor import (
 )
 from backend.services.monitoring_service import (
     MonitorAccessDeniedError,
+    MonitorLeaseConflictError,
     MonitorLimitExceededError,
     MonitorNotFoundError,
     MonitorServiceError,
     MonitorSSRFError,
+    MonitorTargetSuspendedError,
     MonitorValidationError,
     monitoring_service,
 )
 
-router = APIRouter(prefix="/monitor/targets", tags=["Monitoring Targets"])
+router = APIRouter(prefix="/monitor", tags=["Monitoring"])
+targets_router = APIRouter(prefix="/targets", tags=["Monitoring Targets"])
 
 
 # ── POST /v1/monitor/targets ───────────────────────────────────────────────────
 
-@router.post("", response_model=MonitoringTargetResponse, status_code=status.HTTP_201_CREATED)
+@targets_router.post("", response_model=MonitoringTargetResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
 async def register_target(
     request: Request,
@@ -90,7 +98,7 @@ async def register_target(
 
 # ── GET /v1/monitor/targets ────────────────────────────────────────────────────
 
-@router.get("", response_model=MonitoringTargetListResponse)
+@targets_router.get("", response_model=MonitoringTargetListResponse)
 @limiter.limit("60/minute")
 async def list_targets(
     request: Request,
@@ -117,7 +125,7 @@ async def list_targets(
 
 # ── GET /v1/monitor/targets/{target_uuid} ─────────────────────────────────────
 
-@router.get("/{target_uuid}", response_model=MonitoringTargetResponse)
+@targets_router.get("/{target_uuid}", response_model=MonitoringTargetResponse)
 @limiter.limit("120/minute")
 async def get_target(
     request: Request,
@@ -145,7 +153,7 @@ async def get_target(
 
 # ── PATCH /v1/monitor/targets/{target_uuid} ───────────────────────────────────
 
-@router.patch("/{target_uuid}", response_model=MonitoringTargetResponse)
+@targets_router.patch("/{target_uuid}", response_model=MonitoringTargetResponse)
 @limiter.limit("30/minute")
 async def update_target(
     request: Request,
@@ -181,7 +189,7 @@ async def update_target(
 
 # ── DELETE /v1/monitor/targets/{target_uuid} ──────────────────────────────────
 
-@router.delete("/{target_uuid}", status_code=status.HTTP_204_NO_CONTENT)
+@targets_router.delete("/{target_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("30/minute")
 async def delete_target(
     request: Request,
@@ -211,3 +219,191 @@ async def delete_target(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         )
+
+
+# ── POST /v1/monitor/targets/{target_uuid}/pause ──────────────────────────────
+
+@targets_router.post("/{target_uuid}/pause", response_model=MonitoringTargetResponse)
+@limiter.limit("30/minute")
+async def pause_target(
+    request: Request,
+    target_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MonitoringTargetResponse:
+    """Pause an active monitoring target. Returns 409 if target is auto-suspended."""
+    ip = request.client.host if request.client else None
+    try:
+        target = await monitoring_service.pause_target(
+            session=db,
+            target_uuid=target_uuid,
+            current_user=current_user,
+            ip_address=ip,
+        )
+        return MonitoringTargetResponse.model_validate(target)
+    except MonitorTargetSuspendedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except MonitorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except MonitorAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except MonitorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
+
+
+
+# ── POST /v1/monitor/targets/{target_uuid}/resume ─────────────────────────────
+
+@targets_router.post("/{target_uuid}/resume", response_model=MonitoringTargetResponse)
+@limiter.limit("30/minute")
+async def resume_target(
+    request: Request,
+    target_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MonitoringTargetResponse:
+    """Resume a paused monitoring target. Rejects suspended targets with HTTP 409."""
+    ip = request.client.host if request.client else None
+    try:
+        target = await monitoring_service.resume_target(
+            session=db,
+            target_uuid=target_uuid,
+            current_user=current_user,
+            ip_address=ip,
+        )
+        return MonitoringTargetResponse.model_validate(target)
+    except MonitorTargetSuspendedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except MonitorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except MonitorAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except MonitorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
+
+
+# ── POST /v1/monitor/targets/{target_uuid}/reactivate ─────────────────────────
+
+@targets_router.post("/{target_uuid}/reactivate", response_model=MonitoringTargetResponse)
+@limiter.limit("30/minute")
+async def reactivate_target(
+    request: Request,
+    target_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MonitoringTargetResponse:
+    """Reactivate an auto-suspended or paused target, clearing failure count."""
+    ip = request.client.host if request.client else None
+    try:
+        target = await monitoring_service.reactivate_target(
+            session=db,
+            target_uuid=target_uuid,
+            current_user=current_user,
+            ip_address=ip,
+        )
+        return MonitoringTargetResponse.model_validate(target)
+    except MonitorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except MonitorAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except MonitorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
+
+
+# ── POST /v1/monitor/targets/{target_uuid}/check-now ──────────────────────────
+
+@targets_router.post("/{target_uuid}/check-now", response_model=CheckNowResponse)
+@limiter.limit("5/minute")
+async def check_now(
+    request: Request,
+    target_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CheckNowResponse:
+    """Request immediate execution of a target using the existing lease mechanism."""
+    ip = request.client.host if request.client else None
+    try:
+        return await monitoring_service.trigger_check_now(
+            session=db,
+            target_uuid=target_uuid,
+            current_user=current_user,
+            ip_address=ip,
+        )
+    except MonitorLeaseConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except MonitorTargetSuspendedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except MonitorValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
+    except MonitorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except MonitorAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except MonitorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
+
+
+# ── GET /v1/monitor/targets/{target_uuid}/diagnostics ─────────────────────────
+
+@targets_router.get(
+    "/{target_uuid}/diagnostics",
+    response_model=MonitoringTargetDiagnosticsResponse,
+)
+@limiter.limit("60/minute")
+async def get_diagnostics(
+    request: Request,
+    target_uuid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MonitoringTargetDiagnosticsResponse:
+    """Retrieve diagnostic details from the last execution of a monitoring target."""
+    try:
+        return await monitoring_service.get_target_diagnostics(
+            session=db,
+            target_uuid=target_uuid,
+            current_user=current_user,
+        )
+    except MonitorNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except MonitorAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except MonitorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
+
+
+# ── GET /v1/monitor/stats ─────────────────────────────────────────────────────
+
+@router.get("/stats", response_model=MonitoringStatsResponse)
+@limiter.limit("30/minute")
+async def get_monitor_stats(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MonitoringStatsResponse:
+    """Retrieve aggregate monitoring target status distribution and scheduler health."""
+    try:
+        return await monitoring_service.get_monitoring_stats(
+            session=db,
+            current_user=current_user,
+        )
+    except MonitorServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        )
+
+
+# Mount target sub-router
+router.include_router(targets_router)
+

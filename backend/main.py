@@ -27,6 +27,7 @@ from backend.api.dependencies import (
 )
 from backend.api.middleware import TimingMiddleware
 from backend.api.routers import (
+    alerts,
     analytics,
     auth,
     download,
@@ -124,6 +125,8 @@ app.include_router(investigate.router,  prefix=settings.API_V1_STR)
 app.include_router(incidents.router,    prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5A router
 app.include_router(monitor.router,      prefix=settings.API_V1_STR)
+# Sprint 5 Phase 5C router
+app.include_router(alerts.router,       prefix=settings.API_V1_STR)
 
 
 

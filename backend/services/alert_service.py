@@ -1,7 +1,7 @@
 """
 backend/services/alert_service.py
 ───────────────────────────────────
-Sprint 5: Security Alert Management & Deduplication Service.
+Sprint 5 Phase 5C: Security Alert Management, Triage & Deduplication Service.
 
 Features:
 - Deterministic SHA-256 Alert Fingerprinting
@@ -9,18 +9,32 @@ Features:
 - Transaction-safe Alert Storm Protection (occurrence_count increment)
 - Monotonic Severity Escalation (downgrade prevention)
 - Strict Multi-Tenancy & User Ownership Isolation
-- 1-to-Many Incident Linkage via alerts.incident_id
+- Authoritative 4-state Alert Triage Lifecycle (OPEN, ACKNOWLEDGED, RESOLVED, DISMISSED)
+- Idempotent self-transitions with zero audit log pollution
+- Recurrence handling: new qualifying event on terminal alerts creates fresh OPEN alert
+- Decoupled from IncidentService (alert triage never mutates incidents)
+- Bounded 24-hour Telemetry & Deduplication Savings Ratio
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import threading
+import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from backend.database.models import Alert
+from backend.database.models import Alert, AuditEvent, User
+from backend.schemas.alerts import (
+    ALERT_STATUS_TRANSITIONS,
+    AlertStatsResponse,
+    AlertStatus,
+)
 from backend.schemas.soc import SecurityEventSchema
 from backend.services.cache import cache_service
 from backend.utils.domain import normalize_canonical_domain
@@ -46,8 +60,118 @@ def _higher_severity(sev1: str, sev2: str) -> str:
     return sev1 if _get_severity_rank(sev1) >= _get_severity_rank(sev2) else sev2
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# ── SQLite Concurrency Synchronization Locks ──────────────────────────────────
+_sqlite_alert_thread_locks: dict[int, threading.Lock] = {}
+_sqlite_alert_thread_guard = threading.Lock()
+_sqlite_alert_async_locks: dict[tuple[int, int], asyncio.Lock] = {}
+
+
+def _get_sqlite_alert_thread_lock(user_id: int) -> threading.Lock:
+    """Return a thread-safe threading.Lock for user_id on non-PostgreSQL engines."""
+    with _sqlite_alert_thread_guard:
+        if user_id not in _sqlite_alert_thread_locks:
+            _sqlite_alert_thread_locks[user_id] = threading.Lock()
+        return _sqlite_alert_thread_locks[user_id]
+
+
+def _get_sqlite_alert_async_lock(user_id: int) -> asyncio.Lock:
+    """Return an asyncio.Lock bound to current event loop for user_id."""
+    try:
+        loop = asyncio.get_running_loop()
+        key = (id(loop), user_id)
+        if key not in _sqlite_alert_async_locks:
+            _sqlite_alert_async_locks[key] = asyncio.Lock()
+        return _sqlite_alert_async_locks[key]
+    except RuntimeError:
+        return asyncio.Lock()
+
+
+# ── Session Execution Helpers (AsyncSession | Session) ─────────────────────────
+
+async def _execute(session: Session | AsyncSession, stmt: Any) -> Any:
+    if isinstance(session, AsyncSession):
+        return await session.execute(stmt)
+    return session.execute(stmt)
+
+
+async def _commit(session: Session | AsyncSession) -> None:
+    if isinstance(session, AsyncSession):
+        await session.commit()
+    else:
+        session.commit()
+
+
+async def _rollback(session: Session | AsyncSession) -> None:
+    if isinstance(session, AsyncSession):
+        await session.rollback()
+    else:
+        session.rollback()
+
+
+async def _refresh(session: Session | AsyncSession, obj: Any) -> None:
+    if isinstance(session, AsyncSession):
+        await session.refresh(obj)
+    else:
+        session.refresh(obj)
+
+
+# ── Domain Exceptions ──────────────────────────────────────────────────────────
+
+class AlertServiceError(Exception):
+    """Base exception for alert service errors."""
+    pass
+
+
+class AlertNotFoundError(AlertServiceError):
+    """Raised when an alert is not found or inaccessible under tenant scope."""
+    pass
+
+
+class AlertAccessDeniedError(AlertServiceError):
+    """Raised when an operation violates tenant boundaries."""
+    pass
+
+
+class AlertInvalidTransitionError(AlertServiceError):
+    """Raised when an alert status transition violates the state machine."""
+    pass
+
+
+class AlertValidationError(AlertServiceError):
+    """Raised when alert input parameters fail business validation."""
+    pass
+
+
+def _create_audit_event(
+    session: Session | AsyncSession,
+    action: str,
+    actor_user_id: int | None,
+    target_resource: str,
+    resource_id: str,
+    details: dict[str, Any] | None = None,
+    ip_address: str | None = None,
+) -> AuditEvent:
+    """Emit an immutable audit event for an alert triage operation."""
+    audit = AuditEvent(
+        event_uuid=str(uuid.uuid4()),
+        action=action,
+        actor_user_id=actor_user_id,
+        target_resource=target_resource,
+        resource_id=resource_id,
+        details=details or {},
+        ip_address=ip_address,
+        created_at=_utcnow(),
+    )
+    session.add(audit)
+    return audit
+
+
 class AlertService:
-    """Centralized Alert Management Service."""
+    """Centralized Alert Management & Triage Service."""
 
     def compute_fingerprint(
         self,
@@ -97,9 +221,10 @@ class AlertService:
         incident_id: int | None = None,
     ) -> tuple[Alert, bool]:
         """
-        Process a SecurityEvent and create a new Alert OR update an existing open Alert.
+        Process a SecurityEvent and create a new Alert OR update an existing open/acknowledged Alert.
 
-        Transaction-safe and robust against concurrent execution.
+        Terminal alerts (RESOLVED or DISMISSED) are excluded from the candidate check, ensuring
+        that threat recurrence creates a brand-new Alert entity without silent suppression.
         """
         effective_rule = rule_name or f"RULE_{event.event_type.value}"
         fingerprint = self.compute_fingerprint(
@@ -110,14 +235,14 @@ class AlertService:
         )
         logger.debug("[ALERT_SERVICE] Processing fingerprint %s for %s", fingerprint[:16], event.indicator_value)
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = _utcnow()
         dedup_window_start = now - timedelta(minutes=ALERT_DEDUPLICATION_WINDOW_MIN)
 
-        # DB Query for existing open alert matching fingerprint or exact indicator & user scope within dedup window
+        # Candidate query: strictly matches active (OPEN or ACKNOWLEDGED) alerts within dedup window
         stmt = select(Alert).where(
             Alert.rule_name == effective_rule,
             Alert.indicator_type == event.indicator_type.value,
-            Alert.status.in_(["OPEN", "ACKNOWLEDGED", "INVESTIGATING"]),
+            Alert.status.in_([AlertStatus.OPEN.value, AlertStatus.ACKNOWLEDGED.value]),
             Alert.last_seen_at >= dedup_window_start,
         )
 
@@ -159,12 +284,12 @@ class AlertService:
             )
             return existing_alert, False
 
-        # Create new Alert
+        # Create new Alert (also runs on recurrence when past alert was RESOLVED or DISMISSED)
         new_alert = Alert(
             title=f"{effective_rule}: {event.indicator_value[:64]}",
             description=f"Security event {event.event_type.value} triggered rule {effective_rule}.",
             severity=event.severity.value,
-            status="OPEN",
+            status=AlertStatus.OPEN.value,
             rule_name=effective_rule,
             indicator_type=event.indicator_type.value,
             indicator_value=event.indicator_value,
@@ -183,7 +308,6 @@ class AlertService:
         except Exception as exc:
             session.rollback()
             logger.warning("[ALERT_SERVICE] Insert race detected, retrying select: %s", exc)
-            # Re-query after race
             retry_alert = session.scalars(stmt).first()
             if retry_alert:
                 retry_alert.occurrence_count += 1
@@ -204,5 +328,422 @@ class AlertService:
 
         return new_alert, True
 
+    # ── Phase 5C Triage Methods ───────────────────────────────────────────────
+
+    async def list_alerts(
+        self,
+        session: Session | AsyncSession,
+        current_user: User,
+        page: int = 1,
+        page_size: int = 20,
+        severity: str | None = None,
+        status: str | None = None,
+        rule_name: str | None = None,
+        indicator_type: str | None = None,
+        incident_id: int | None = None,
+    ) -> dict[str, Any]:
+        """List alerts filtered by criteria and strictly scoped to current tenant (or global for admin)."""
+        is_admin = getattr(current_user, "role", "user") == "admin"
+        query = select(Alert)
+
+        if not is_admin:
+            query = query.where(Alert.user_id == current_user.id)
+
+        if severity:
+            query = query.where(Alert.severity == severity.upper().strip())
+        if status:
+            query = query.where(Alert.status == status.upper().strip())
+        if rule_name:
+            query = query.where(Alert.rule_name == rule_name.strip())
+        if indicator_type:
+            query = query.where(Alert.indicator_type == indicator_type.upper().strip())
+        if incident_id is not None:
+            query = query.where(Alert.incident_id == incident_id)
+
+        total_stmt = select(func.count()).select_from(query.subquery())
+        total_res = await _execute(session, total_stmt)
+        total = total_res.scalar() or 0
+
+        offset = max(0, (page - 1) * page_size)
+        items_stmt = query.order_by(Alert.last_seen_at.desc()).offset(offset).limit(page_size)
+        items_res = await _execute(session, items_stmt)
+        items = list(items_res.scalars().all())
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": (page * page_size) < total,
+        }
+
+    async def get_alert_by_uuid(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+    ) -> Alert:
+        """Retrieve single alert detail by UUID. Non-admins cannot view other tenants' alerts (HTTP 404)."""
+        is_admin = getattr(current_user, "role", "user") == "admin"
+        stmt = select(Alert).where(Alert.alert_uuid == alert_uuid.strip())
+        if not is_admin:
+            stmt = stmt.where(Alert.user_id == current_user.id)
+
+        res = await _execute(session, stmt)
+        alert = res.scalars().first()
+        if not alert:
+            raise AlertNotFoundError(f"Alert '{alert_uuid}' not found.")
+        return alert
+
+    async def _lock_and_get_alert(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+    ) -> Alert:
+        """Fetch alert with pessimistic row-level locking (Postgres) or session lock."""
+        is_admin = getattr(current_user, "role", "user") == "admin"
+        stmt = select(Alert).where(Alert.alert_uuid == alert_uuid.strip())
+        if not is_admin:
+            stmt = stmt.where(Alert.user_id == current_user.id)
+
+        bind = getattr(session, "bind", None)
+        if bind and getattr(bind.dialect, "name", "") == "postgresql":
+            stmt = stmt.with_for_update()
+
+        res = await _execute(session, stmt)
+        alert = res.scalars().first()
+        if not alert:
+            raise AlertNotFoundError(f"Alert '{alert_uuid}' not found.")
+        return alert
+
+    async def acknowledge_alert(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        notes: str | None = None,
+        triage_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        """Acknowledge an alert (OPEN -> ACKNOWLEDGED). Idempotent if already acknowledged."""
+        tenant_key = current_user.id if getattr(current_user, "id", None) else 0
+        if isinstance(session, AsyncSession):
+            async with _get_sqlite_alert_async_lock(tenant_key):
+                return await self._do_acknowledge(session, alert_uuid, current_user, notes, triage_notes, ip_address)
+        else:
+            with _get_sqlite_alert_thread_lock(tenant_key):
+                return await self._do_acknowledge(session, alert_uuid, current_user, notes, triage_notes, ip_address)
+
+    async def _do_acknowledge(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        notes: str | None = None,
+        triage_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        alert = await self._lock_and_get_alert(session, alert_uuid, current_user)
+
+        # Idempotent self-transition
+        if alert.status == AlertStatus.ACKNOWLEDGED.value:
+            return alert
+
+        current_status = AlertStatus(alert.status)
+        allowed_targets = ALERT_STATUS_TRANSITIONS.get(current_status, set())
+        if AlertStatus.ACKNOWLEDGED not in allowed_targets:
+            raise AlertInvalidTransitionError(
+                f"Cannot transition alert from {alert.status} to ACKNOWLEDGED."
+            )
+
+        prev_status = alert.status
+        alert.status = AlertStatus.ACKNOWLEDGED.value
+        alert.acknowledged_at = _utcnow()
+        effective_notes = triage_notes or notes
+        if effective_notes:
+            alert.triage_notes = effective_notes
+
+        _create_audit_event(
+            session=session,
+            action="ALERT_ACKNOWLEDGED",
+            actor_user_id=current_user.id,
+            target_resource="alerts",
+            resource_id=alert.alert_uuid,
+            details={"previous_status": prev_status, "new_status": "ACKNOWLEDGED"},
+            ip_address=ip_address,
+        )
+        await _commit(session)
+        await _refresh(session, alert)
+        return alert
+
+    async def resolve_alert(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        notes: str | None = None,
+        resolution_notes: str | None = None,
+        triage_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        """Resolve an alert (OPEN/ACKNOWLEDGED -> RESOLVED). Idempotent if already resolved."""
+        tenant_key = current_user.id if getattr(current_user, "id", None) else 0
+        if isinstance(session, AsyncSession):
+            async with _get_sqlite_alert_async_lock(tenant_key):
+                return await self._do_resolve(session, alert_uuid, current_user, notes, resolution_notes, triage_notes, ip_address)
+        else:
+            with _get_sqlite_alert_thread_lock(tenant_key):
+                return await self._do_resolve(session, alert_uuid, current_user, notes, resolution_notes, triage_notes, ip_address)
+
+    async def _do_resolve(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        notes: str | None = None,
+        resolution_notes: str | None = None,
+        triage_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        alert = await self._lock_and_get_alert(session, alert_uuid, current_user)
+
+        # Idempotent self-transition
+        if alert.status == AlertStatus.RESOLVED.value:
+            return alert
+
+        current_status = AlertStatus(alert.status)
+        allowed_targets = ALERT_STATUS_TRANSITIONS.get(current_status, set())
+        if AlertStatus.RESOLVED not in allowed_targets:
+            raise AlertInvalidTransitionError(
+                f"Cannot transition alert from {alert.status} to RESOLVED."
+            )
+
+        prev_status = alert.status
+        alert.status = AlertStatus.RESOLVED.value
+        alert.resolved_at = _utcnow()
+        effective_notes = resolution_notes or triage_notes or notes
+        if effective_notes:
+            alert.triage_notes = effective_notes
+
+        _create_audit_event(
+            session=session,
+            action="ALERT_RESOLVED",
+            actor_user_id=current_user.id,
+            target_resource="alerts",
+            resource_id=alert.alert_uuid,
+            details={"previous_status": prev_status, "new_status": "RESOLVED", "notes": effective_notes},
+            ip_address=ip_address,
+        )
+        await _commit(session)
+        await _refresh(session, alert)
+        return alert
+
+    async def dismiss_alert(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        dismiss_reason: str | None = None,
+        reason: str | None = None,
+        triage_notes: str | None = None,
+        notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        """Dismiss an alert as false positive or benign noise. Idempotent if already dismissed."""
+        clean_reason = (dismiss_reason or reason or "").strip()
+        clean_notes = triage_notes or notes
+        if not clean_reason or len(clean_reason) < 3:
+            raise AlertValidationError("dismiss_reason is required and must be at least 3 characters.")
+
+        tenant_key = current_user.id if getattr(current_user, "id", None) else 0
+        if isinstance(session, AsyncSession):
+            async with _get_sqlite_alert_async_lock(tenant_key):
+                return await self._do_dismiss(session, alert_uuid, current_user, clean_reason, clean_notes, ip_address)
+        else:
+            with _get_sqlite_alert_thread_lock(tenant_key):
+                return await self._do_dismiss(session, alert_uuid, current_user, clean_reason, clean_notes, ip_address)
+
+    async def _do_dismiss(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        clean_reason: str,
+        clean_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        alert = await self._lock_and_get_alert(session, alert_uuid, current_user)
+
+        # Idempotent self-transition
+        if alert.status == AlertStatus.DISMISSED.value:
+            return alert
+
+        current_status = AlertStatus(alert.status)
+        allowed_targets = ALERT_STATUS_TRANSITIONS.get(current_status, set())
+        if AlertStatus.DISMISSED not in allowed_targets:
+            raise AlertInvalidTransitionError(
+                f"Cannot transition alert from {alert.status} to DISMISSED."
+            )
+
+        prev_status = alert.status
+        alert.status = AlertStatus.DISMISSED.value
+        alert.dismissed_at = _utcnow()
+        alert.dismiss_reason = clean_reason
+        if clean_notes:
+            alert.triage_notes = clean_notes
+
+        _create_audit_event(
+            session=session,
+            action="ALERT_DISMISSED",
+            actor_user_id=current_user.id,
+            target_resource="alerts",
+            resource_id=alert.alert_uuid,
+            details={"previous_status": prev_status, "new_status": "DISMISSED", "dismiss_reason": clean_reason},
+            ip_address=ip_address,
+        )
+        await _commit(session)
+        await _refresh(session, alert)
+        return alert
+
+    async def reopen_alert(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        reopen_notes: str | None = None,
+        notes: str | None = None,
+        triage_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        """Reopen a resolved, dismissed, or acknowledged alert back to OPEN."""
+        tenant_key = current_user.id if getattr(current_user, "id", None) else 0
+        if isinstance(session, AsyncSession):
+            async with _get_sqlite_alert_async_lock(tenant_key):
+                return await self._do_reopen(session, alert_uuid, current_user, reopen_notes, notes, triage_notes, ip_address)
+        else:
+            with _get_sqlite_alert_thread_lock(tenant_key):
+                return await self._do_reopen(session, alert_uuid, current_user, reopen_notes, notes, triage_notes, ip_address)
+
+    async def _do_reopen(
+        self,
+        session: Session | AsyncSession,
+        alert_uuid: str,
+        current_user: User,
+        reopen_notes: str | None = None,
+        notes: str | None = None,
+        triage_notes: str | None = None,
+        ip_address: str | None = None,
+    ) -> Alert:
+        alert = await self._lock_and_get_alert(session, alert_uuid, current_user)
+
+        # Idempotent self-transition
+        if alert.status == AlertStatus.OPEN.value:
+            return alert
+
+        current_status = AlertStatus(alert.status)
+        allowed_targets = ALERT_STATUS_TRANSITIONS.get(current_status, set())
+        if AlertStatus.OPEN not in allowed_targets:
+            raise AlertInvalidTransitionError(
+                f"Cannot transition alert from {alert.status} to OPEN."
+            )
+
+        prev_status = alert.status
+        alert.status = AlertStatus.OPEN.value
+        alert.resolved_at = None
+        alert.dismissed_at = None
+        alert.acknowledged_at = None
+        alert.dismiss_reason = None
+        effective_notes = reopen_notes or triage_notes or notes
+        if effective_notes:
+            alert.triage_notes = effective_notes
+
+        _create_audit_event(
+            session=session,
+            action="ALERT_REOPENED",
+            actor_user_id=current_user.id,
+            target_resource="alerts",
+            resource_id=alert.alert_uuid,
+            details={"previous_status": prev_status, "new_status": "OPEN", "reopen_notes": effective_notes},
+            ip_address=ip_address,
+        )
+        await _commit(session)
+        await _refresh(session, alert)
+        return alert
+
+    async def get_alert_stats(
+        self,
+        session: Session | AsyncSession,
+        current_user: User,
+    ) -> AlertStatsResponse:
+        """
+        Compute authoritative telemetry over instantaneous snapshot and rolling 24-hour window.
+
+        Deduplication savings ratio is computed across candidate alert entities touched in W24:
+        ratio = 1.0 - (D_distinct / N_occurrences)
+        """
+        is_admin = getattr(current_user, "role", "user") == "admin"
+        query = select(Alert)
+        if not is_admin:
+            query = query.where(Alert.user_id == current_user.id)
+
+        all_alerts_res = await _execute(session, query)
+        all_alerts = list(all_alerts_res.scalars().all())
+
+        now_utc = _utcnow()
+        w24_start = now_utc - timedelta(hours=24)
+
+        by_status: dict[str, int] = {
+            AlertStatus.OPEN.value: 0,
+            AlertStatus.ACKNOWLEDGED.value: 0,
+            AlertStatus.RESOLVED.value: 0,
+            AlertStatus.DISMISSED.value: 0,
+        }
+        by_severity: dict[str, int] = {
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "INFO": 0,
+        }
+
+        for a in all_alerts:
+            st = a.status.upper() if a.status else "OPEN"
+            if st in by_status:
+                by_status[st] += 1
+            sev = a.severity.upper() if a.severity else "MEDIUM"
+            if sev in by_severity:
+                by_severity[sev] += 1
+
+        # Rolling 24-hour observation horizon
+        candidate_alerts_24h = [
+            a for a in all_alerts if a.last_seen_at and a.last_seen_at.replace(tzinfo=timezone.utc) >= w24_start
+        ]
+
+        distinct_count_24h = len(candidate_alerts_24h)
+        total_occurrences_24h = sum(a.occurrence_count for a in candidate_alerts_24h)
+
+        if total_occurrences_24h <= 0 or distinct_count_24h <= 0:
+            dedup_savings_ratio = 0.0
+        else:
+            raw_ratio = 1.0 - (float(distinct_count_24h) / float(total_occurrences_24h))
+            dedup_savings_ratio = max(0.0, min(1.0, round(raw_ratio, 4)))
+
+        velocity_per_hour = round(distinct_count_24h / 24.0, 2)
+
+        return AlertStatsResponse(
+            total_alerts=len(all_alerts),
+            open_alerts=by_status[AlertStatus.OPEN.value],
+            acknowledged_alerts=by_status[AlertStatus.ACKNOWLEDGED.value],
+            resolved_alerts=by_status[AlertStatus.RESOLVED.value],
+            dismissed_alerts=by_status[AlertStatus.DISMISSED.value],
+            by_severity=by_severity,
+            by_status=by_status,
+            alerts_last_24h=distinct_count_24h,
+            alert_velocity_per_hour=velocity_per_hour,
+            dedup_savings_ratio=dedup_savings_ratio,
+        )
+
 
 alert_service = AlertService()
+

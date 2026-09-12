@@ -113,6 +113,8 @@ class Alert(Base):
     __table_args__ = (
         Index("idx_alerts_status_severity", "status", "severity"),
         Index("idx_alerts_indicator", "indicator_type", "indicator_value"),
+        Index("idx_alerts_user_status", "user_id", "status"),
+        Index("idx_alerts_user_last_seen", "user_id", "last_seen_at"),
     )
 
     id               = Column(Integer, primary_key=True, index=True)
@@ -130,6 +132,9 @@ class Alert(Base):
     last_seen_at     = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     acknowledged_at  = Column(DateTime(timezone=True), nullable=True)
     resolved_at      = Column(DateTime(timezone=True), nullable=True)
+    dismissed_at     = Column(DateTime(timezone=True), nullable=True)
+    dismiss_reason   = Column(String(255), nullable=True)
+    triage_notes     = Column(Text, nullable=True)
 
     user_id          = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     incident_id      = Column(Integer, ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -168,6 +173,7 @@ class MonitoringTarget(Base):
 
     __table_args__ = (
         Index("idx_mon_targets_next_check", "is_active", "next_check_at"),
+        Index("idx_mon_targets_user_status", "user_id", "is_active", "consecutive_failures"),
     )
 
     id                     = Column(Integer, primary_key=True, index=True)
@@ -181,6 +187,11 @@ class MonitoringTarget(Base):
     last_prediction        = Column(String(64), nullable=True)
     last_confidence        = Column(Float, nullable=True)
     consecutive_failures   = Column(Integer, default=0, nullable=False)
+
+    # ── Phase 5C: Probe Diagnostics ───────────────────────────────────────────
+    last_status_code       = Column(Integer, nullable=True)
+    last_response_time_ms  = Column(Float, nullable=True)
+    last_error_message     = Column(String(512), nullable=True)
 
     # ── Phase 5: Distributed execution lease (fencing token protocol) ─────────
     execution_token        = Column(String(36), nullable=True)    # UUID v4; NULL = unclaimed
