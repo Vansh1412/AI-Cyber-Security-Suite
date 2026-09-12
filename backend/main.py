@@ -33,6 +33,7 @@ from backend.api.routers import (
     explain,
     health,
     history,
+    incidents,
     intel,
     investigate,
     mlops,
@@ -113,6 +114,8 @@ app.include_router(mlops.router,        prefix=settings.API_V1_STR)
 app.include_router(intel.router,        prefix=settings.API_V1_STR)
 app.include_router(analytics.router,    prefix=settings.API_V1_STR)
 app.include_router(investigate.router,  prefix=settings.API_V1_STR)
+# Sprint 5 Phase 4 router
+app.include_router(incidents.router,    prefix=settings.API_V1_STR)
 
 
 
