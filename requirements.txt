@@ -12,6 +12,7 @@ tabulate
 colorama
 pyyaml
 pyarrow
+tldextract
 
 # ── Machine Learning ──────────────────────────────────────────────────────────
 scikit-learn
