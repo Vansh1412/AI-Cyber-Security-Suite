@@ -46,6 +46,7 @@ from backend.core.exceptions import general_exception_handler
 from backend.core.rate_limit import limiter
 from backend.database.session import init_db
 from backend.services.cache import cache_service
+from backend.services.monitoring_engine import monitoring_engine
 from src.utils.logger import logger
 
 
@@ -64,9 +65,13 @@ async def lifespan(app: FastAPI):
     get_explainer_service()
     logger.info("ML Services pre-warmed.")
 
+    # Sprint 5 Phase 5B: Monitoring Engine Lifespan Integration
+    await monitoring_engine.start()
+
     yield
 
     logger.info("Shutting down API...")
+    await monitoring_engine.stop()
     await cache_service.disconnect()
 
 

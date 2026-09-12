@@ -16,11 +16,13 @@ Provides service layer for:
 
 from __future__ import annotations
 
+import asyncio
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -56,6 +58,28 @@ def _higher_severity(sev1: str, sev2: str) -> str:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+_sqlite_incident_locks: dict[tuple[int, int], asyncio.Lock] = {}
+_sqlite_incident_thread_locks: dict[int, threading.Lock] = {}
+_sqlite_incident_thread_guard = threading.Lock()
+
+
+def _get_sqlite_incident_lock(user_id: int) -> asyncio.Lock:
+    """Return an asyncio.Lock bound to the current event loop for user_id."""
+    loop = asyncio.get_running_loop()
+    key = (id(loop), user_id)
+    if key not in _sqlite_incident_locks:
+        _sqlite_incident_locks[key] = asyncio.Lock()
+    return _sqlite_incident_locks[key]
+
+
+def _get_sqlite_incident_thread_lock(user_id: int) -> threading.Lock:
+    """Return a thread-safe threading.Lock for user_id on non-PostgreSQL engines."""
+    with _sqlite_incident_thread_guard:
+        if user_id not in _sqlite_incident_thread_locks:
+            _sqlite_incident_thread_locks[user_id] = threading.Lock()
+        return _sqlite_incident_thread_locks[user_id]
 
 
 # ── Domain Exceptions ──────────────────────────────────────────────────────────
@@ -324,6 +348,131 @@ class IncidentService:
             creator_id if creator_id is not None else "SYSTEM",
         )
         return incident
+
+    async def get_or_create_threat_incident(
+        self,
+        session: Session | AsyncSession,
+        *,
+        user_id: int | None,
+        normalized_domain: str,
+        severity: str,
+        title: str,
+        description: str | None = None,
+        initial_alert_id: int | None = None,
+        ip_address: str | None = None,
+    ) -> tuple[Incident, bool]:
+        """
+        Sprint 5 Phase 5B: Idempotently retrieve an existing OPEN/INVESTIGATING threat incident
+        for user_id + normalized_domain, or atomically create a new Incident.
+
+        Guarantees:
+          - PostgreSQL: Acquires transaction-scoped advisory lock:
+              SELECT pg_advisory_xact_lock(hashtext(:lock_key))
+            where lock_key = f"INCIDENT:{user_id}:{normalized_domain}".
+            This serializes concurrent creation attempts for the same tenant and threat domain.
+          - SQLite: Serialized via event-loop-safe asyncio.Lock per tenant.
+          - Monotonic severity escalation: If an existing incident is found and the incoming
+            severity is higher, escalates incident.severity.
+          - Automatic alert attachment: If initial_alert_id is provided, attaches the alert to the
+            incident without race conditions.
+          - Returns (incident, created_bool).
+        """
+        user_key = user_id if user_id is not None else 0
+        is_pg = _is_postgresql(session)
+
+        async def _do_resolution() -> tuple[Incident, bool]:
+            if is_pg:
+                lock_key = f"INCIDENT:{user_id}:{normalized_domain}"
+                await _execute(
+                    session,
+                    text("SELECT pg_advisory_xact_lock(hashtext(:key))").bindparams(key=lock_key),
+                )
+
+            # Look up existing open incident for user and title
+            stmt = (
+                select(Incident)
+                .where(
+                    Incident.created_by_user_id == user_id,
+                    Incident.title == title,
+                    Incident.status.in_(["OPEN", "INVESTIGATING"]),
+                )
+                .order_by(Incident.id.asc())
+            )
+            if is_pg:
+                stmt = stmt.with_for_update()
+
+            res = await _execute(session, stmt)
+            existing = res.scalars().first() if hasattr(res, "scalars") else None
+
+            if existing:
+                # 1. Monotonic severity escalation
+                existing_rank = _get_severity_rank(existing.severity)
+                incoming_rank = _get_severity_rank(severity)
+                if incoming_rank > existing_rank:
+                    existing.severity = severity
+                    existing.updated_at = _utcnow()
+
+                # 2. Attach alert if provided and not yet attached
+                if initial_alert_id:
+                    alert_stmt = select(Alert).where(Alert.id == initial_alert_id)
+                    alert_res = await _execute(session, alert_stmt)
+                    alert_obj = alert_res.scalars().first() if hasattr(alert_res, "scalars") else None
+                    if alert_obj and alert_obj.incident_id != existing.id:
+                        alert_obj.incident_id = existing.id
+
+                await _commit(session)
+                await _refresh(session, existing)
+                return existing, False
+
+            # Create new incident
+            now = _utcnow()
+            new_inc = Incident(
+                title=title,
+                description=description or f"Automated threat incident for domain {normalized_domain}.",
+                severity=severity,
+                status=IncidentStatus.OPEN.value,
+                created_by_user_id=user_id,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(new_inc)
+            await _commit(session)
+            await _refresh(session, new_inc)
+
+            if initial_alert_id:
+                alert_stmt = select(Alert).where(Alert.id == initial_alert_id)
+                alert_res = await _execute(session, alert_stmt)
+                alert_obj = alert_res.scalars().first() if hasattr(alert_res, "scalars") else None
+                if alert_obj:
+                    alert_obj.incident_id = new_inc.id
+                    await _commit(session)
+                    await _refresh(session, new_inc)
+
+            await self._audit(
+                session=session,
+                action="INCIDENT_CREATED_AUTOMATED",
+                actor_user_id=user_id,
+                target_resource="Incident",
+                resource_id=str(new_inc.id),
+                details={
+                    "incident_uuid": new_inc.incident_uuid,
+                    "title": new_inc.title,
+                    "severity": new_inc.severity,
+                    "normalized_domain": normalized_domain,
+                    "initial_alert_id": initial_alert_id,
+                },
+                ip_address=ip_address,
+            )
+            await _commit(session)
+            await _refresh(session, new_inc)
+            return new_inc, True
+
+        if not is_pg:
+            async with _get_sqlite_incident_lock(user_key):
+                with _get_sqlite_incident_thread_lock(user_key):
+                    return await _do_resolution()
+        else:
+            return await _do_resolution()
 
     async def get_incident(
         self,
