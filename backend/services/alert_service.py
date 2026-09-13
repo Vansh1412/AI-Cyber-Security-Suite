@@ -29,7 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from backend.database.models import Alert, AuditEvent, User
+from backend.database.models import Alert, AuditEvent, Notification, User
 from backend.schemas.alerts import (
     ALERT_STATUS_TRANSITIONS,
     AlertStatsResponse,
@@ -37,6 +37,7 @@ from backend.schemas.alerts import (
 )
 from backend.schemas.soc import SecurityEventSchema
 from backend.services.cache import cache_service
+from backend.services.notification_service import notification_service
 from backend.utils.domain import normalize_canonical_domain
 from src.utils.logger import logger
 
@@ -263,24 +264,34 @@ class AlertService:
         existing_alert = session.scalars(stmt.order_by(Alert.last_seen_at.desc())).first()
 
         if existing_alert:
+            old_severity = existing_alert.severity
+            new_severity = _higher_severity(old_severity, event.severity.value)
+            is_escalation = _get_severity_rank(new_severity) > _get_severity_rank(old_severity)
+
             # Atomic update / Alert storm suppression
             existing_alert.occurrence_count += 1
             existing_alert.last_seen_at = now
             existing_alert.fingerprint = fingerprint
             # Monotonic severity escalation (never downgrade)
-            existing_alert.severity = _higher_severity(existing_alert.severity, event.severity.value)
+            existing_alert.severity = new_severity
 
             if incident_id and not existing_alert.incident_id:
                 existing_alert.incident_id = incident_id
+
+            if is_escalation:
+                notification_service.create_in_app_and_outbox_for_alert(
+                    session, existing_alert, is_escalation=True, old_severity=old_severity
+                )
 
             session.commit()
             session.refresh(existing_alert)
 
             logger.info(
-                "[ALERT_SERVICE] Deduplicated alert ID %d (Count: %d, Severity: %s)",
+                "[ALERT_SERVICE] Deduplicated alert ID %d (Count: %d, Severity: %s, Escalated: %s)",
                 existing_alert.id,
                 existing_alert.occurrence_count,
                 existing_alert.severity,
+                is_escalation,
             )
             return existing_alert, False
 
@@ -303,6 +314,9 @@ class AlertService:
 
         try:
             session.add(new_alert)
+            notification_service.create_in_app_and_outbox_for_alert(
+                session, new_alert, is_escalation=False
+            )
             session.commit()
             session.refresh(new_alert)
         except Exception as exc:
@@ -667,6 +681,20 @@ class AlertService:
             details={"previous_status": prev_status, "new_status": "OPEN", "reopen_notes": effective_notes},
             ip_address=ip_address,
         )
+
+        if alert.user_id is not None:
+            reopen_notif = Notification(
+                notification_uuid=str(uuid.uuid4()),
+                user_id=alert.user_id,
+                title=f"Alert Reopened: {alert.title}"[:255],
+                message=f"Alert {alert.alert_uuid} was reopened. Triage resumed.",
+                severity=alert.severity,
+                is_read=False,
+                link_url=f"/alerts/{alert.alert_uuid}",
+                created_at=_utcnow(),
+            )
+            session.add(reopen_notif)
+
         await _commit(session)
         await _refresh(session, alert)
         return alert

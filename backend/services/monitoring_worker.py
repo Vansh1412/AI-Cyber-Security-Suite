@@ -47,6 +47,7 @@ from backend.services.monitoring_probe import (
     ProbeResult,
     monitoring_probe,
 )
+from backend.services.notification_service import notification_service
 from backend.services.prediction import PredictionService
 from backend.services.scheduler_service import ClaimedTarget, scheduler_service
 from src.utils.logger import logger
@@ -334,6 +335,12 @@ class MonitoringWorker:
                     text("UPDATE monitoring_targets SET is_active = :active WHERE id = :target_id"),
                     {"active": False, "target_id": target.target_id},
                 )
+                try:
+                    notification_service.create_target_suspension_notification(
+                        post_sess, target, subtype, is_ssrf=(subtype == "SSRF_OUTBOUND_PROBE_BLOCKED")
+                    )
+                except Exception as exc:
+                    logger.warning("[WORKER] Failed to enqueue suspension notification: %s", exc)
                 post_sess.commit()
 
             # ── Step 12: Sanitized Audit Trail ─────────────────────────────────
