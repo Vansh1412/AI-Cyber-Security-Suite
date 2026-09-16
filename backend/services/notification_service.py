@@ -48,6 +48,7 @@ from backend.database.models import (
     Base,
     Notification,
     NotificationPreference,
+    SOCEventStream,
     User,
 )
 from backend.schemas.notification import (
@@ -56,6 +57,7 @@ from backend.schemas.notification import (
     NotificationPreferenceUpdate,
     NotificationResponse,
 )
+from backend.services.event_broadcaster import event_broadcaster
 from src.utils.logger import logger
 
 
@@ -154,6 +156,13 @@ async def _commit(session: Session | AsyncSession) -> None:
         await session.commit()
     else:
         session.commit()
+
+
+async def _flush(session: Session | AsyncSession) -> None:
+    if isinstance(session, AsyncSession):
+        await session.flush()
+    else:
+        session.flush()
 
 
 async def _rollback(session: Session | AsyncSession) -> None:
@@ -556,8 +565,34 @@ class NotificationService:
 
         if not notif.is_read:
             notif.is_read = True
+            unread_count = await self.get_unread_count(session, current_user)
+            soc_event_payload = {
+                "id": notif.notification_uuid,
+                "is_read": True,
+                "unread_count": max(0, unread_count - 1),
+            }
+            soc_event = SOCEventStream(
+                event_id=_uuid_str(),
+                tenant_id=current_user.id,
+                channel="notifications",
+                event_type="unread_count_updated",
+                aggregate_id=notif.notification_uuid,
+                payload_json=soc_event_payload,
+                created_at=_utcnow(),
+            )
+            session.add(soc_event)
+            await _flush(session)
+            soc_cursor_id = soc_event.cursor_id or 0
             await _commit(session)
             await _refresh(session, notif)
+            event_broadcaster.publish_event_nowait(
+                event_type="unread_count_updated",
+                channel="notifications",
+                tenant_id=current_user.id,
+                payload=soc_event_payload,
+                aggregate_id=notif.notification_uuid,
+                cursor_id=soc_cursor_id,
+            )
 
         return NotificationResponse.model_validate(notif)
 
@@ -576,7 +611,31 @@ class NotificationService:
             .values(is_read=True)
         )
         res = await _execute(session, stmt)
+        soc_event_payload = {
+            "all_read": True,
+            "unread_count": 0,
+        }
+        soc_event = SOCEventStream(
+            event_id=_uuid_str(),
+            tenant_id=current_user.id,
+            channel="notifications",
+            event_type="unread_count_updated",
+            aggregate_id=f"user_{current_user.id}",
+            payload_json=soc_event_payload,
+            created_at=_utcnow(),
+        )
+        session.add(soc_event)
+        await _flush(session)
+        soc_cursor_id = soc_event.cursor_id or 0
         await _commit(session)
+        event_broadcaster.publish_event_nowait(
+            event_type="unread_count_updated",
+            channel="notifications",
+            tenant_id=current_user.id,
+            payload=soc_event_payload,
+            aggregate_id=f"user_{current_user.id}",
+            cursor_id=soc_cursor_id,
+        )
         return res.rowcount or 0
 
     # ── Transactional Outbox & In-App Enqueueing ──────────────────────────────
@@ -609,6 +668,7 @@ class NotificationService:
         pref_min_sev = pref.min_severity if pref else "HIGH"
         pref_min_rank = _get_severity_rank(pref_min_sev)
 
+        notif_soc_event: SOCEventStream | None = None
         # 1. In-App Notification Enqueue
         if pref is None or pref.in_app_enabled:
             # Check unread cap
@@ -639,6 +699,23 @@ class NotificationService:
                     created_at=now,
                 )
                 session.add(notif)
+                soc_event_payload = {
+                    "id": notif.notification_uuid,
+                    "title": notif.title,
+                    "severity": notif.severity,
+                    "alert_uuid": alert.alert_uuid,
+                    "unread_count": (unread_count + 1),
+                }
+                notif_soc_event = SOCEventStream(
+                    event_id=_uuid_str(),
+                    tenant_id=alert.user_id,
+                    channel="notifications",
+                    event_type="notification_dispatched",
+                    aggregate_id=notif.notification_uuid,
+                    payload_json=soc_event_payload,
+                    created_at=now,
+                )
+                session.add(notif_soc_event)
 
         # 2. Webhook Outbox Enqueue
         if (
@@ -690,6 +767,8 @@ class NotificationService:
                 )
                 session.add(outbox_job)
 
+        return notif_soc_event
+
     def create_target_suspension_notification(
         self,
         session: Session,
@@ -717,6 +796,7 @@ class NotificationService:
             else f"Monitoring target {target.normalized_domain} was auto-suspended after 5 consecutive failed checks."
         )
 
+        target_soc_event: SOCEventStream | None = None
         # In-App
         if pref is None or pref.in_app_enabled:
             notif = Notification(
@@ -730,6 +810,23 @@ class NotificationService:
                 created_at=now,
             )
             session.add(notif)
+            target_soc_event = SOCEventStream(
+                event_id=_uuid_str(),
+                tenant_id=target.user_id,
+                channel="monitor",
+                event_type="target_status_changed",
+                aggregate_id=target.target_uuid,
+                payload_json={
+                    "id": target.target_uuid,
+                    "url": target.url,
+                    "normalized_domain": getattr(target, "normalized_domain", None),
+                    "status": "SUSPENDED",
+                    "subtype": subtype,
+                    "severity": severity,
+                },
+                created_at=now,
+            )
+            session.add(target_soc_event)
 
         # Webhook
         if (
@@ -766,6 +863,8 @@ class NotificationService:
                     created_at=now,
                 )
                 session.add(outbox_job)
+
+        return target_soc_event
 
 
 notification_service = NotificationService()

@@ -42,12 +42,14 @@ from backend.api.routers import (
     notifications,
     scan,
     stats,
+    streams,
 )
 from backend.core.config import settings
 from backend.core.exceptions import general_exception_handler
 from backend.core.rate_limit import limiter
 from backend.database.session import init_db
 from backend.services.cache import cache_service
+from backend.services.event_broadcaster import event_broadcaster
 from backend.services.monitoring_engine import monitoring_engine
 from backend.services.notification_dispatcher import notification_dispatcher
 from src.utils.logger import logger
@@ -74,9 +76,13 @@ async def lifespan(app: FastAPI):
     # Sprint 5 Phase 5D: Notification Dispatcher Lifespan Integration
     await notification_dispatcher.start()
 
+    # Sprint 5 Phase 5E: Event Broadcaster Lifespan Integration
+    await event_broadcaster.start()
+
     yield
 
     logger.info("Shutting down API...")
+    await event_broadcaster.stop()
     await notification_dispatcher.stop()
     await monitoring_engine.stop()
     await cache_service.disconnect()
@@ -131,8 +137,10 @@ app.include_router(investigate.router,  prefix=settings.API_V1_STR)
 app.include_router(incidents.router,    prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5A router
 app.include_router(monitor.router,      prefix=settings.API_V1_STR)
+# Sprint 5 Phase 5E router (mounted before alerts/notifications to prevent /{uuid} capture)
+app.include_router(streams.router,       prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5C router
-app.include_router(alerts.router,       prefix=settings.API_V1_STR)
+app.include_router(alerts.router,        prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5D router
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
 

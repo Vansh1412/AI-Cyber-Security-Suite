@@ -29,7 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from backend.database.models import Alert, AuditEvent, Notification, User
+from backend.database.models import Alert, AuditEvent, Notification, SOCEventStream, User
 from backend.schemas.alerts import (
     ALERT_STATUS_TRANSITIONS,
     AlertStatsResponse,
@@ -37,6 +37,7 @@ from backend.schemas.alerts import (
 )
 from backend.schemas.soc import SecurityEventSchema
 from backend.services.cache import cache_service
+from backend.services.event_broadcaster import event_broadcaster
 from backend.services.notification_service import notification_service
 from backend.utils.domain import normalize_canonical_domain
 from src.utils.logger import logger
@@ -111,6 +112,13 @@ async def _rollback(session: Session | AsyncSession) -> None:
         await session.rollback()
     else:
         session.rollback()
+
+
+async def _flush(session: Session | AsyncSession) -> None:
+    if isinstance(session, AsyncSession):
+        await session.flush()
+    else:
+        session.flush()
 
 
 async def _refresh(session: Session | AsyncSession, obj: Any) -> None:
@@ -278,13 +286,58 @@ class AlertService:
             if incident_id and not existing_alert.incident_id:
                 existing_alert.incident_id = incident_id
 
+            notif_soc_event = None
             if is_escalation:
-                notification_service.create_in_app_and_outbox_for_alert(
+                notif_soc_event = notification_service.create_in_app_and_outbox_for_alert(
                     session, existing_alert, is_escalation=True, old_severity=old_severity
                 )
 
+            # Sprint 5 Phase 5E: Durable SOC Event Stream
+            soc_event_payload = {
+                "id": existing_alert.alert_uuid,
+                "target_id": str(existing_alert.target_id) if getattr(existing_alert, "target_id", None) else None,
+                "severity": existing_alert.severity,
+                "status": existing_alert.status,
+                "occurrence_count": existing_alert.occurrence_count,
+                "is_escalation": is_escalation,
+                "rule_name": existing_alert.rule_name,
+                "indicator_value": existing_alert.indicator_value,
+            }
+            soc_event = SOCEventStream(
+                event_id=str(uuid.uuid4()),
+                tenant_id=existing_alert.user_id if existing_alert.user_id is not None else 0,
+                channel="alerts",
+                event_type="alert_updated",
+                aggregate_id=existing_alert.alert_uuid,
+                payload_json=soc_event_payload,
+                created_at=now,
+            )
+            session.add(soc_event)
+
+            session.flush()
+            soc_cursor_id = soc_event.cursor_id or 0
+            notif_cursor_id = notif_soc_event.cursor_id if notif_soc_event else 0
+
             session.commit()
             session.refresh(existing_alert)
+
+            event_broadcaster.publish_event_nowait(
+                event_type="alert_updated",
+                channel="alerts",
+                tenant_id=existing_alert.user_id if existing_alert.user_id is not None else 0,
+                payload=soc_event_payload,
+                aggregate_id=existing_alert.alert_uuid,
+                cursor_id=soc_cursor_id,
+            )
+            if notif_soc_event and notif_cursor_id:
+                event_broadcaster.publish_event_nowait(
+                    event_type="notification_dispatched",
+                    channel="notifications",
+                    tenant_id=notif_soc_event.tenant_id,
+                    payload=notif_soc_event.payload_json,
+                    aggregate_id=notif_soc_event.aggregate_id,
+                    cursor_id=notif_cursor_id,
+                )
 
             logger.info(
                 "[ALERT_SERVICE] Deduplicated alert ID %d (Count: %d, Severity: %s, Escalated: %s)",
@@ -314,11 +367,54 @@ class AlertService:
 
         try:
             session.add(new_alert)
-            notification_service.create_in_app_and_outbox_for_alert(
+            notif_soc_event = notification_service.create_in_app_and_outbox_for_alert(
                 session, new_alert, is_escalation=False
             )
+            soc_event_payload = {
+                "id": new_alert.alert_uuid,
+                "target_id": str(new_alert.target_id) if getattr(new_alert, "target_id", None) else None,
+                "severity": new_alert.severity,
+                "status": new_alert.status,
+                "rule_name": new_alert.rule_name,
+                "indicator_type": new_alert.indicator_type,
+                "indicator_value": new_alert.indicator_value,
+                "occurrence_count": 1,
+            }
+            soc_event = SOCEventStream(
+                event_id=str(uuid.uuid4()),
+                tenant_id=new_alert.user_id if new_alert.user_id is not None else 0,
+                channel="alerts",
+                event_type="alert_created",
+                aggregate_id=new_alert.alert_uuid,
+                payload_json=soc_event_payload,
+                created_at=now,
+            )
+            session.add(soc_event)
+
+            session.flush()
+            soc_cursor_id = soc_event.cursor_id or 0
+            notif_cursor_id = notif_soc_event.cursor_id if notif_soc_event else 0
+
             session.commit()
             session.refresh(new_alert)
+
+            event_broadcaster.publish_event_nowait(
+                event_type="alert_created",
+                channel="alerts",
+                tenant_id=new_alert.user_id if new_alert.user_id is not None else 0,
+                payload=soc_event_payload,
+                aggregate_id=new_alert.alert_uuid,
+                cursor_id=soc_cursor_id,
+            )
+            if notif_soc_event and notif_cursor_id:
+                event_broadcaster.publish_event_nowait(
+                    event_type="notification_dispatched",
+                    channel="notifications",
+                    tenant_id=notif_soc_event.tenant_id,
+                    payload=notif_soc_event.payload_json,
+                    aggregate_id=notif_soc_event.aggregate_id,
+                    cursor_id=notif_cursor_id,
+                )
         except Exception as exc:
             session.rollback()
             logger.warning("[ALERT_SERVICE] Insert race detected, retrying select: %s", exc)
@@ -327,8 +423,37 @@ class AlertService:
                 retry_alert.occurrence_count += 1
                 retry_alert.last_seen_at = now
                 retry_alert.severity = _higher_severity(retry_alert.severity, event.severity.value)
+                soc_event_payload = {
+                    "id": retry_alert.alert_uuid,
+                    "target_id": str(retry_alert.target_id) if getattr(retry_alert, "target_id", None) else None,
+                    "severity": retry_alert.severity,
+                    "status": retry_alert.status,
+                    "occurrence_count": retry_alert.occurrence_count,
+                    "rule_name": retry_alert.rule_name,
+                    "indicator_value": retry_alert.indicator_value,
+                }
+                soc_event = SOCEventStream(
+                    event_id=str(uuid.uuid4()),
+                    tenant_id=retry_alert.user_id if retry_alert.user_id is not None else 0,
+                    channel="alerts",
+                    event_type="alert_updated",
+                    aggregate_id=retry_alert.alert_uuid,
+                    payload_json=soc_event_payload,
+                    created_at=now,
+                )
+                session.add(soc_event)
+                session.flush()
+                retry_cursor_id = soc_event.cursor_id or 0
                 session.commit()
                 session.refresh(retry_alert)
+                event_broadcaster.publish_event_nowait(
+                    event_type="alert_updated",
+                    channel="alerts",
+                    tenant_id=retry_alert.user_id if retry_alert.user_id is not None else 0,
+                    payload=soc_event_payload,
+                    aggregate_id=retry_alert.alert_uuid,
+                    cursor_id=retry_cursor_id,
+                )
                 return retry_alert, False
             raise
 
@@ -487,8 +612,38 @@ class AlertService:
             details={"previous_status": prev_status, "new_status": "ACKNOWLEDGED"},
             ip_address=ip_address,
         )
+        soc_ack_payload = {
+            "id": alert.alert_uuid,
+            "status": "ACKNOWLEDGED",
+            "previous_status": prev_status,
+            "severity": alert.severity,
+            "acknowledged_at": alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
+            "notes": effective_notes,
+        }
+        soc_ack_event = SOCEventStream(
+            event_id=str(uuid.uuid4()),
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            channel="alerts",
+            event_type="alert_updated",
+            aggregate_id=alert.alert_uuid,
+            payload_json=soc_ack_payload,
+            created_at=_utcnow(),
+        )
+        session.add(soc_ack_event)
+
+        await _flush(session)
+        soc_cursor_id = soc_ack_event.cursor_id or 0
         await _commit(session)
         await _refresh(session, alert)
+
+        event_broadcaster.publish_event_nowait(
+            event_type="alert_updated",
+            channel="alerts",
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            payload=soc_ack_payload,
+            aggregate_id=alert.alert_uuid,
+            cursor_id=soc_cursor_id,
+        )
         return alert
 
     async def resolve_alert(
@@ -549,8 +704,38 @@ class AlertService:
             details={"previous_status": prev_status, "new_status": "RESOLVED", "notes": effective_notes},
             ip_address=ip_address,
         )
+        soc_res_payload = {
+            "id": alert.alert_uuid,
+            "status": "RESOLVED",
+            "previous_status": prev_status,
+            "severity": alert.severity,
+            "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
+            "notes": effective_notes,
+        }
+        soc_res_event = SOCEventStream(
+            event_id=str(uuid.uuid4()),
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            channel="alerts",
+            event_type="alert_updated",
+            aggregate_id=alert.alert_uuid,
+            payload_json=soc_res_payload,
+            created_at=_utcnow(),
+        )
+        session.add(soc_res_event)
+
+        await _flush(session)
+        soc_cursor_id = soc_res_event.cursor_id or 0
         await _commit(session)
         await _refresh(session, alert)
+
+        event_broadcaster.publish_event_nowait(
+            event_type="alert_updated",
+            channel="alerts",
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            payload=soc_res_payload,
+            aggregate_id=alert.alert_uuid,
+            cursor_id=soc_cursor_id,
+        )
         return alert
 
     async def dismiss_alert(
@@ -616,8 +801,39 @@ class AlertService:
             details={"previous_status": prev_status, "new_status": "DISMISSED", "dismiss_reason": clean_reason},
             ip_address=ip_address,
         )
+        soc_dis_payload = {
+            "id": alert.alert_uuid,
+            "status": "DISMISSED",
+            "previous_status": prev_status,
+            "severity": alert.severity,
+            "dismissed_at": alert.dismissed_at.isoformat() if alert.dismissed_at else None,
+            "dismiss_reason": clean_reason,
+            "notes": clean_notes,
+        }
+        soc_dis_event = SOCEventStream(
+            event_id=str(uuid.uuid4()),
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            channel="alerts",
+            event_type="alert_updated",
+            aggregate_id=alert.alert_uuid,
+            payload_json=soc_dis_payload,
+            created_at=_utcnow(),
+        )
+        session.add(soc_dis_event)
+
+        await _flush(session)
+        soc_cursor_id = soc_dis_event.cursor_id or 0
         await _commit(session)
         await _refresh(session, alert)
+
+        event_broadcaster.publish_event_nowait(
+            event_type="alert_updated",
+            channel="alerts",
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            payload=soc_dis_payload,
+            aggregate_id=alert.alert_uuid,
+            cursor_id=soc_cursor_id,
+        )
         return alert
 
     async def reopen_alert(
@@ -695,8 +911,37 @@ class AlertService:
             )
             session.add(reopen_notif)
 
+        soc_reopen_payload = {
+            "id": alert.alert_uuid,
+            "status": "OPEN",
+            "previous_status": prev_status,
+            "severity": alert.severity,
+            "notes": effective_notes,
+        }
+        soc_reopen_event = SOCEventStream(
+            event_id=str(uuid.uuid4()),
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            channel="alerts",
+            event_type="alert_updated",
+            aggregate_id=alert.alert_uuid,
+            payload_json=soc_reopen_payload,
+            created_at=_utcnow(),
+        )
+        session.add(soc_reopen_event)
+
+        await _flush(session)
+        soc_cursor_id = soc_reopen_event.cursor_id or 0
         await _commit(session)
         await _refresh(session, alert)
+
+        event_broadcaster.publish_event_nowait(
+            event_type="alert_updated",
+            channel="alerts",
+            tenant_id=alert.user_id if alert.user_id is not None else 0,
+            payload=soc_reopen_payload,
+            aggregate_id=alert.alert_uuid,
+            cursor_id=soc_cursor_id,
+        )
         return alert
 
     async def get_alert_stats(

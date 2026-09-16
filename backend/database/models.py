@@ -18,11 +18,14 @@ audit_events             — system audit trail
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -275,3 +278,36 @@ class AuditEvent(Base):
     created_at      = Column(DateTime(timezone=True), default=_utcnow, nullable=False, index=True)
 
     actor_user      = relationship("User", foreign_keys=[actor_user_id])
+
+
+class SOCEventStream(Base):
+    __tablename__ = "soc_event_stream"
+
+    __table_args__ = (
+        Index("idx_soc_events_tenant_cursor", "tenant_id", "cursor_id"),
+        Index("idx_soc_events_created_at", "created_at"),
+    )
+
+    cursor_id    = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    event_id     = Column(String(36), default=_uuid_str, unique=True, index=True, nullable=False)
+    tenant_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    channel      = Column(String(64), nullable=False, default="soc")
+    event_type   = Column(String(64), nullable=False, index=True)
+    aggregate_id = Column(String(64), nullable=True)
+    payload_json = Column(JSON, nullable=False)
+    created_at   = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    tenant       = relationship("User", foreign_keys=[tenant_id])
+
+    @property
+    def event_payload(self) -> dict:
+        if isinstance(self.payload_json, dict):
+            return self.payload_json
+        try:
+            return json.loads(self.payload_json)
+        except Exception:
+            return {}
+
+    @event_payload.setter
+    def event_payload(self, val: Any) -> None:
+        self.payload_json = val
