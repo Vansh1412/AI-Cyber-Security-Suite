@@ -25,6 +25,7 @@ class TokenResponse(BaseModel):
 class UserRead(BaseModel):
     id: int
     email: str
+    role: str = "user"
     is_active: bool
 
     model_config = {"from_attributes": True}

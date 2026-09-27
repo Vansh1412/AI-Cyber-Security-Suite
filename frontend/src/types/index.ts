@@ -214,3 +214,6 @@ export interface DomainScanHistory {
     source_feed: string | null
   }[]
 }
+
+// ── Sprint 5 & 6: Security Operations Center (SOC) Types ─────────────────────
+export * from './soc'

@@ -2,7 +2,8 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, Search, History, BarChart3, User,
-  Settings, Shield, LogOut, ShieldAlert, ChevronRight, Crosshair,
+  Settings, Shield, LogOut, ShieldAlert, Crosshair,
+  AlertOctagon, Radio, Lock, Bell,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { clsx } from 'clsx'
@@ -13,6 +14,14 @@ const navItems = [
   { to: '/history',     icon: History,         label: 'History'       },
   { to: '/analytics',   icon: BarChart3,       label: 'Analytics'     },
   { to: '/investigate', icon: Crosshair,       label: 'Investigate'   },
+]
+
+const socNavItems = [
+  { to: '/soc/alerts',        icon: ShieldAlert,  label: 'Alerts & Triage' },
+  { to: '/soc/incidents',     icon: AlertOctagon, label: 'Incidents'       },
+  { to: '/soc/monitoring',    icon: Radio,        label: 'Monitoring'      },
+  { to: '/soc/containment',   icon: Lock,         label: 'Containment'     },
+  { to: '/soc/notifications', icon: Bell,         label: 'Notifications'   },
 ]
 
 const bottomItems = [
@@ -50,6 +59,33 @@ export function Sidebar() {
           Main Menu
         </p>
         {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              clsx('nav-link', isActive && 'active')
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <item.icon size={17} className={isActive ? 'text-primary-400' : ''} />
+                <span className="flex-1">{item.label}</span>
+                {isActive && (
+                  <motion.span
+                    layoutId="sidebar-indicator"
+                    className="w-1.5 h-1.5 rounded-full bg-primary-400"
+                  />
+                )}
+              </>
+            )}
+          </NavLink>
+        ))}
+
+        {/* Security Operations section */}
+        <p className="text-2xs text-gray-500 font-semibold uppercase tracking-widest px-3 mb-2 mt-4">
+          Security Operations
+        </p>
+        {socNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

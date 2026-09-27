@@ -23,6 +23,35 @@ function PageLoader() {
   )
 }
 
+function SOCPhasePlaceholder({
+  title,
+  phase,
+  description,
+}: {
+  title: string
+  phase: string
+  description: string
+}) {
+  return (
+    <div className="p-8 max-w-4xl mx-auto space-y-6">
+      <div className="bg-white dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center justify-between pb-4 border-b border-light-border dark:border-dark-border">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h2>
+            <p className="text-sm text-gray-500 mt-1">{description}</p>
+          </div>
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-primary-500/10 text-primary-400 border border-primary-500/20">
+            {phase}
+          </span>
+        </div>
+        <div className="py-8 text-center text-gray-500 text-sm">
+          Phase 6A foundation initialized. Complete operational UI scheduled for rollout in {phase}.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function AppRouter() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -41,6 +70,59 @@ export function AppRouter() {
           <Route path="/investigate"  element={<ThreatInvestigation />} />
           <Route path="/profile"      element={<Profile />}             />
           <Route path="/settings"     element={<Settings />}            />
+
+          {/* SOC operational routing foundation */}
+          <Route
+            path="/soc/alerts"
+            element={
+              <SOCPhasePlaceholder
+                title="Security Alerts & Triage"
+                phase="Phase 6B"
+                description="Real-time alert ingestion, deduplication, and directed triage lifecycle."
+              />
+            }
+          />
+          <Route
+            path="/soc/incidents"
+            element={
+              <SOCPhasePlaceholder
+                title="Incident Management"
+                phase="Phase 6C"
+                description="Security incident aggregation, alert association, and case tracking."
+              />
+            }
+          />
+          <Route
+            path="/soc/monitoring"
+            element={
+              <SOCPhasePlaceholder
+                title="Target Monitoring Fleet"
+                phase="Phase 6C"
+                description="Continuous probe monitoring, SSRF validation, and execution diagnostics."
+              />
+            }
+          />
+          <Route
+            path="/soc/containment"
+            element={
+              <SOCPhasePlaceholder
+                title="Threat Containment & SOAR"
+                phase="Phase 6D"
+                description="Automated containment actions, SOAR playbooks, and Rule 0 allowlist fencing."
+              />
+            }
+          />
+          <Route
+            path="/soc/notifications"
+            element={
+              <SOCPhasePlaceholder
+                title="Notifications & Webhooks"
+                phase="Phase 6D"
+                description="In-app notification center and encrypted webhook delivery management."
+              />
+            }
+          />
+
           {/* Admin only */}
           <Route element={<AdminRoute />}>
             <Route path="/admin" element={<Admin />} />
