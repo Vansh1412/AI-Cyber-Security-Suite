@@ -30,6 +30,7 @@ from backend.api.routers import (
     alerts,
     analytics,
     auth,
+    containment,
     download,
     explain,
     health,
@@ -52,6 +53,7 @@ from backend.services.cache import cache_service
 from backend.services.event_broadcaster import event_broadcaster
 from backend.services.monitoring_engine import monitoring_engine
 from backend.services.notification_dispatcher import notification_dispatcher
+from backend.services.retention_worker import retention_worker
 from src.utils.logger import logger
 
 
@@ -79,9 +81,13 @@ async def lifespan(app: FastAPI):
     # Sprint 5 Phase 5E: Event Broadcaster Lifespan Integration
     await event_broadcaster.start()
 
+    # Sprint 5 Phase 5F: Retention Worker Lifespan Integration
+    await retention_worker.start()
+
     yield
 
     logger.info("Shutting down API...")
+    await retention_worker.stop()
     await event_broadcaster.stop()
     await notification_dispatcher.stop()
     await monitoring_engine.stop()
@@ -139,6 +145,8 @@ app.include_router(incidents.router,    prefix=settings.API_V1_STR)
 app.include_router(monitor.router,      prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5E router (mounted before alerts/notifications to prevent /{uuid} capture)
 app.include_router(streams.router,       prefix=settings.API_V1_STR)
+# Sprint 5 Phase 5F router
+app.include_router(containment.router,   prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5C router
 app.include_router(alerts.router,        prefix=settings.API_V1_STR)
 # Sprint 5 Phase 5D router

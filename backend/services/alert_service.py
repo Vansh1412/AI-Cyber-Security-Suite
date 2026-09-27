@@ -177,6 +177,43 @@ def _create_audit_event(
     )
     session.add(audit)
     return audit
+# ── Sprint 5 Phase 5F: Background Containment Helper ──────────────────────────
+
+async def _run_background_containment(alert_id: int) -> None:
+    """
+    Safely execute automated threat containment in a dedicated background session.
+
+    Ensures the background task owns its own AsyncSessionLocal lifecycle,
+    isolated from the caller's transient request session.
+    """
+    try:
+        from backend.database.session import AsyncSessionLocal
+        from backend.services.containment_service import containment_service
+
+        async with AsyncSessionLocal() as bg_session:
+            try:
+                stmt = select(Alert).where(Alert.id == alert_id)
+                res = await bg_session.execute(stmt)
+                alert = res.scalar_one_or_none()
+                if alert is not None:
+                    await containment_service.evaluate_alert_containment(bg_session, alert)
+                    await bg_session.commit()
+            except asyncio.CancelledError:
+                logger.info("[ALERT_SERVICE] Background containment task cancelled for alert ID %d", alert_id)
+                raise
+            except Exception as exc:
+                await bg_session.rollback()
+                logger.warning(
+                    "[ALERT_SERVICE] Background containment evaluation failed for alert ID %d: %s",
+                    alert_id,
+                    exc,
+                )
+    except Exception as exc:
+        logger.warning(
+            "[ALERT_SERVICE] Failed to initialize background containment session for alert ID %d: %s",
+            alert_id,
+            exc,
+        )
 
 
 class AlertService:
@@ -465,7 +502,28 @@ class AlertService:
             new_alert.user_id if new_alert.user_id is not None else "SYSTEM",
         )
 
+        # Sprint 5 Phase 5F: Automated Threat Containment Hook (Dedicated Background Session)
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                loop.create_task(_run_background_containment(new_alert.id))
+        except RuntimeError:
+            pass
+        except Exception as exc:
+            logger.warning("[ALERT_SERVICE] Containment evaluation hook failed safely: %s", exc)
+
         return new_alert, True
+
+    # ── Phase 5F Containment Hook ─────────────────────────────────────────────
+
+    async def evaluate_containment(
+        self,
+        session: Session | AsyncSession,
+        alert: Alert,
+    ) -> Any:
+        """Evaluate and execute Phase 5F automated threat containment on an alert."""
+        from backend.services.containment_service import containment_service
+        return await containment_service.evaluate_alert_containment(session, alert)
 
     # ── Phase 5C Triage Methods ───────────────────────────────────────────────
 

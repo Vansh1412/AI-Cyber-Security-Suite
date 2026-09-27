@@ -311,3 +311,120 @@ class SOCEventStream(Base):
     @event_payload.setter
     def event_payload(self, val: Any) -> None:
         self.payload_json = val
+
+
+# ── Sprint 5 Phase 5F: Automated Threat Containment & SOAR Models ──────────────
+
+class SOCContainmentPolicy(Base):
+    __tablename__ = "soc_containment_policies"
+
+    id                             = Column(Integer, primary_key=True, index=True)
+    tenant_id                      = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    auto_containment_enabled       = Column(Boolean, default=False, nullable=False)
+    auto_blacklist_enabled         = Column(Boolean, default=False, nullable=False)
+    auto_quarantine_enabled        = Column(Boolean, default=False, nullable=False)
+    auto_incident_binding_enabled  = Column(Boolean, default=False, nullable=False)
+    containment_min_severity       = Column(String(16), default="CRITICAL", nullable=False)
+    blacklist_ttl_seconds          = Column(Integer, default=86400, nullable=False)
+    policy_version                 = Column(Integer, default=1, nullable=False)
+    created_at                     = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at                     = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_by                     = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    tenant                         = relationship("User", foreign_keys=[tenant_id])
+    updater                        = relationship("User", foreign_keys=[updated_by])
+
+
+class SOCPlaybookRun(Base):
+    __tablename__ = "soc_playbook_runs"
+
+    __table_args__ = (
+        Index("idx_playbook_runs_tenant_status", "tenant_id", "status"),
+        Index("idx_playbook_runs_alert", "alert_id"),
+    )
+
+    id               = Column(Integer, primary_key=True, index=True)
+    run_uuid         = Column(String(36), default=_uuid_str, unique=True, index=True, nullable=False)
+    playbook_name    = Column(String(128), nullable=False)
+    playbook_version = Column(String(32), default="1.0", nullable=False)
+    tenant_id        = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    trigger_event    = Column(String(64), nullable=False)
+    alert_id         = Column(Integer, ForeignKey("alerts.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_id        = Column(Integer, ForeignKey("monitoring_targets.id", ondelete="SET NULL"), nullable=True, index=True)
+    status           = Column(String(32), default="PENDING", nullable=False, index=True)
+    fencing_token    = Column(Integer, default=1, nullable=False)
+    action_count     = Column(Integer, default=0, nullable=False)
+    idempotency_key  = Column(String(255), unique=True, index=True, nullable=False)
+    error_message    = Column(Text, nullable=True)
+    started_at       = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at     = Column(DateTime(timezone=True), nullable=True)
+    created_at       = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at       = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    tenant           = relationship("User", foreign_keys=[tenant_id])
+    alert            = relationship("Alert", foreign_keys=[alert_id])
+    target           = relationship("MonitoringTarget", foreign_keys=[target_id])
+    actions          = relationship("SOCContainmentAction", back_populates="playbook_run", cascade="all, delete-orphan")
+
+
+class SOCContainmentAction(Base):
+    __tablename__ = "soc_containment_actions"
+
+    __table_args__ = (
+        Index("idx_containment_actions_tenant_status", "tenant_id", "status"),
+        Index("idx_containment_actions_target", "target_identifier"),
+    )
+
+    id                     = Column(Integer, primary_key=True, index=True)
+    action_uuid            = Column(String(36), default=_uuid_str, unique=True, index=True, nullable=False)
+    run_id                 = Column(Integer, ForeignKey("soc_playbook_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    tenant_id              = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    alert_id               = Column(Integer, ForeignKey("alerts.id", ondelete="SET NULL"), nullable=True, index=True)
+    incident_id            = Column(Integer, ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_identifier      = Column(String(512), nullable=False, index=True)
+    action_type            = Column(String(64), nullable=False, index=True)
+    status                 = Column(String(32), default="PENDING", nullable=False, index=True)
+    actor_user_id          = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    trigger_source         = Column(String(64), nullable=False)
+    action_idempotency_key = Column(String(255), unique=True, index=True, nullable=False)
+    rollback_metadata      = Column(JSON, nullable=True)
+    result_metadata        = Column(JSON, nullable=True)
+    error_message          = Column(Text, nullable=True)
+    expires_at             = Column(DateTime(timezone=True), nullable=True)
+    reverted_at            = Column(DateTime(timezone=True), nullable=True)
+    reverted_by_user_id    = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at             = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    started_at             = Column(DateTime(timezone=True), nullable=True)
+    completed_at           = Column(DateTime(timezone=True), nullable=True)
+
+    playbook_run           = relationship("SOCPlaybookRun", back_populates="actions")
+    tenant                 = relationship("User", foreign_keys=[tenant_id])
+    alert                  = relationship("Alert", foreign_keys=[alert_id])
+    incident               = relationship("Incident", foreign_keys=[incident_id])
+    actor_user             = relationship("User", foreign_keys=[actor_user_id])
+    reverted_by_user       = relationship("User", foreign_keys=[reverted_by_user_id])
+
+
+class SOCDynamicBlacklist(Base):
+    __tablename__ = "soc_dynamic_blacklist"
+
+    __table_args__ = (
+        Index("idx_dynamic_blacklist_indicator", "indicator_value", "is_active"),
+        Index("idx_dynamic_blacklist_tenant", "tenant_id", "is_active"),
+        Index("idx_dynamic_blacklist_expires", "expires_at"),
+    )
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    indicator_type        = Column(String(32), nullable=False)
+    indicator_value       = Column(String(512), nullable=False, index=True)
+    tenant_id             = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    containment_action_id = Column(Integer, ForeignKey("soc_containment_actions.id", ondelete="SET NULL"), nullable=True, index=True)
+    reason                = Column(String(255), nullable=False)
+    is_active             = Column(Boolean, default=True, nullable=False, index=True)
+    expires_at            = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at            = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at            = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    tenant                = relationship("User", foreign_keys=[tenant_id])
+    containment_action    = relationship("SOCContainmentAction", foreign_keys=[containment_action_id])
+
