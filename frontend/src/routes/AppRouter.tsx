@@ -14,6 +14,7 @@ const Profile               = lazy(() => import('@/pages/Profile'))
 const Settings              = lazy(() => import('@/pages/Settings'))
 const Admin                 = lazy(() => import('@/pages/Admin'))
 const ThreatInvestigation   = lazy(() => import('@/pages/ThreatInvestigation'))
+const AlertConsole           = lazy(() => import('@/pages/soc/AlertConsole'))
 
 function PageLoader() {
   return (
@@ -71,17 +72,8 @@ export function AppRouter() {
           <Route path="/profile"      element={<Profile />}             />
           <Route path="/settings"     element={<Settings />}            />
 
-          {/* SOC operational routing foundation */}
-          <Route
-            path="/soc/alerts"
-            element={
-              <SOCPhasePlaceholder
-                title="Security Alerts & Triage"
-                phase="Phase 6B"
-                description="Real-time alert ingestion, deduplication, and directed triage lifecycle."
-              />
-            }
-          />
+          {/* SOC operational routing */}
+          <Route path="/soc/alerts" element={<AlertConsole />} />
           <Route
             path="/soc/incidents"
             element={
