@@ -15,6 +15,8 @@ const Settings              = lazy(() => import('@/pages/Settings'))
 const Admin                 = lazy(() => import('@/pages/Admin'))
 const ThreatInvestigation   = lazy(() => import('@/pages/ThreatInvestigation'))
 const AlertConsole           = lazy(() => import('@/pages/soc/AlertConsole'))
+const IncidentManager       = lazy(() => import('@/pages/soc/IncidentManager'))
+const MonitoringConsole     = lazy(() => import('@/pages/soc/MonitoringConsole'))
 
 function PageLoader() {
   return (
@@ -74,26 +76,8 @@ export function AppRouter() {
 
           {/* SOC operational routing */}
           <Route path="/soc/alerts" element={<AlertConsole />} />
-          <Route
-            path="/soc/incidents"
-            element={
-              <SOCPhasePlaceholder
-                title="Incident Management"
-                phase="Phase 6C"
-                description="Security incident aggregation, alert association, and case tracking."
-              />
-            }
-          />
-          <Route
-            path="/soc/monitoring"
-            element={
-              <SOCPhasePlaceholder
-                title="Target Monitoring Fleet"
-                phase="Phase 6C"
-                description="Continuous probe monitoring, SSRF validation, and execution diagnostics."
-              />
-            }
-          />
+          <Route path="/soc/incidents" element={<IncidentManager />} />
+          <Route path="/soc/monitoring" element={<MonitoringConsole />} />
           <Route
             path="/soc/containment"
             element={

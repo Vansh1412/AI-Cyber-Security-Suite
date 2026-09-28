@@ -183,6 +183,7 @@ export function useSSEStream(options: UseSSEStreamOptions = {}): UseSSEStreamRet
       if (eventType.startsWith('alert_')) {
         queryClient.invalidateQueries({ queryKey: ['alerts'] })
         queryClient.invalidateQueries({ queryKey: ['alert-stats'] })
+        queryClient.invalidateQueries({ queryKey: ['incidents'] })
       } else if (eventType.startsWith('notification_')) {
         queryClient.invalidateQueries({ queryKey: ['notifications'] })
         queryClient.invalidateQueries({ queryKey: ['notifications-unread'] })
