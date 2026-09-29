@@ -17,40 +17,13 @@ const ThreatInvestigation   = lazy(() => import('@/pages/ThreatInvestigation'))
 const AlertConsole           = lazy(() => import('@/pages/soc/AlertConsole'))
 const IncidentManager       = lazy(() => import('@/pages/soc/IncidentManager'))
 const MonitoringConsole     = lazy(() => import('@/pages/soc/MonitoringConsole'))
+const ContainmentConsole     = lazy(() => import('@/pages/soc/ContainmentConsole'))
+const NotificationCenter     = lazy(() => import('@/pages/soc/NotificationCenter'))
 
 function PageLoader() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="w-8 h-8 rounded-full border-2 border-primary-600 border-t-transparent animate-spin" />
-    </div>
-  )
-}
-
-function SOCPhasePlaceholder({
-  title,
-  phase,
-  description,
-}: {
-  title: string
-  phase: string
-  description: string
-}) {
-  return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6">
-      <div className="bg-white dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-2xl p-6 shadow-sm">
-        <div className="flex items-center justify-between pb-4 border-b border-light-border dark:border-dark-border">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h2>
-            <p className="text-sm text-gray-500 mt-1">{description}</p>
-          </div>
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-primary-500/10 text-primary-400 border border-primary-500/20">
-            {phase}
-          </span>
-        </div>
-        <div className="py-8 text-center text-gray-500 text-sm">
-          Phase 6A foundation initialized. Complete operational UI scheduled for rollout in {phase}.
-        </div>
-      </div>
     </div>
   )
 }
@@ -78,26 +51,8 @@ export function AppRouter() {
           <Route path="/soc/alerts" element={<AlertConsole />} />
           <Route path="/soc/incidents" element={<IncidentManager />} />
           <Route path="/soc/monitoring" element={<MonitoringConsole />} />
-          <Route
-            path="/soc/containment"
-            element={
-              <SOCPhasePlaceholder
-                title="Threat Containment & SOAR"
-                phase="Phase 6D"
-                description="Automated containment actions, SOAR playbooks, and Rule 0 allowlist fencing."
-              />
-            }
-          />
-          <Route
-            path="/soc/notifications"
-            element={
-              <SOCPhasePlaceholder
-                title="Notifications & Webhooks"
-                phase="Phase 6D"
-                description="In-app notification center and encrypted webhook delivery management."
-              />
-            }
-          />
+          <Route path="/soc/containment" element={<ContainmentConsole />} />
+          <Route path="/soc/notifications" element={<NotificationCenter />} />
 
           {/* Admin only */}
           <Route element={<AdminRoute />}>

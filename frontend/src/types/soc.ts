@@ -212,8 +212,10 @@ export interface NotificationItem {
 export interface NotificationListResponse {
   items: NotificationItem[]
   total: number
+  unread_count: number
   page: number
   page_size: number
+  has_next: boolean
 }
 
 export interface UnreadCountResponse {
@@ -225,14 +227,15 @@ export interface MarkAllReadResponse {
 }
 
 export interface NotificationPreferenceResponse {
-  id: number
-  user_id: number
   in_app_enabled: boolean
   email_enabled: boolean
   webhook_enabled: boolean
   webhook_url: string | null
+  has_webhook_secret: boolean
   webhook_secret_preview: string | null
   min_severity: string
+  circuit_broken: boolean
+  circuit_broken_at: string | null
   updated_at: string
 }
 
@@ -242,6 +245,8 @@ export interface NotificationPreferenceUpdate {
   webhook_enabled?: boolean
   webhook_url?: string | null
   webhook_secret?: string | null
+  rotate_secret?: boolean
+  clear_webhook_secret?: boolean
   min_severity?: string
 }
 
