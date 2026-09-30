@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-09-30T18:05:11.392Z"
-last_activity: 2026-09-30 -- Phase 07 execution started
+status: complete
+last_updated: "2026-10-01T01:06:00.000Z"
+last_activity: 2026-10-01 -- Phase 07 execution complete
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 7
   total_plans: 3
-  completed_plans: 2
-  percent: 66
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -20,23 +20,23 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-09-30)
 
 **Core value:** Real-time, explainable threat detection and deterministic SOC incident containment that protects enterprise infrastructure while preventing alert fatigue and operational lockouts.  
-**Current focus:** Phase 07 — production-hardening-staging-parity
+**Current focus:** Milestone v1.0 complete
 
 ## Current Position
 
-Phase: 07 (production-hardening-staging-parity) — EXECUTING  
-Plan: 3 of 3 (07-01 and 07-02 complete; executing 07-03)  
-Status: Executing Phase 07 Wave 3  
-Last activity: 2026-10-01 -- Plan 07-02 complete
+Phase: 07 (production-hardening-staging-parity) — COMPLETE  
+Plan: 3 of 3 (07-01, 07-02, and 07-03 complete)  
+Status: Phase 07 Complete  
+Last activity: 2026-10-01 -- Plan 07-03 complete
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Milestone Progress:**
 
-- Completed phases: 6 / 7
-- Test coverage: 582 passing tests across unit, integration, and staging suites
+- Completed phases: 7 / 7
+- Test coverage: 589 passing tests across unit, integration, and staging suites
 
 ## Accumulated Context
 
@@ -57,11 +57,14 @@ Decisions logged in `.planning/PROJECT.md`:
 - `DEC-011` (D-01/D-02): Dual-mode staging test harness with pool_size=20/max_overflow=30 and table cleanup.
 - `DEC-012` (D-03): Row-level locking with with_for_update() on PostgreSQL to prevent lost updates in attach_alerts.
 - `DEC-013` (D-04): In-memory degradation fallback preventing HTTP 500 errors during Redis outages.
+- `DEC-014` (D-05/D-08): Full closed-loop SOC lifecycle (scan -> alert -> incident -> containment -> revert) against canonical /v1/ routes with dynamic blacklist and audit tracking.
+- `DEC-015` (D-06): Adversarial multi-tenant matrix validating 404/403 anti-enumeration isolation across alerts, incidents, and stream tickets.
+- `DEC-016` (D-07): Live real-time SSE streaming with single-use 30s tickets, monotonic cursor ordering, and timeout bounding.
 
-### Pending Todos
+### Completed Milestones
 
-- [ ] Staging PostgreSQL concurrency and race condition validation.
-- [ ] Frontend end-to-end integration and RBAC routing audit.
+- [x] Staging PostgreSQL concurrency and race condition validation (100-alert concurrency harness & row-level locking).
+- [x] Multi-tenant adversarial isolation & full SOC E2E lifecycle integration.
 
 ### Blockers/Concerns
 
