@@ -502,7 +502,7 @@ class IncidentService:
                 raise IncidentValidationError(f"Invalid incident identifier format: '{incident_id_or_uuid}'")
 
         # Apply PostgreSQL SELECT FOR UPDATE if applicable
-        if not isinstance(session, AsyncSession) and session.bind and session.bind.dialect.name == "postgresql":
+        if _is_postgresql(session):
             stmt = stmt.with_for_update()
 
         res = await _execute(session, stmt)
@@ -702,6 +702,14 @@ class IncidentService:
         incident = await self.get_incident(session, incident_id_or_uuid, current_user)
         actor_id = current_user.id if current_user else None
 
+        # Lock incident row under PostgreSQL to prevent lost update race conditions on severity/status
+        if _is_postgresql(session):
+            lock_stmt = select(Incident).where(Incident.id == incident.id).with_for_update()
+            lock_res = await _execute(session, lock_stmt)
+            locked_inc = lock_res.scalars().first()
+            if locked_inc is not None:
+                incident = locked_inc
+
         # Fetch requested alerts
         stmt = select(Alert).where(Alert.id.in_(alert_ids))
         res = await _execute(session, stmt)
@@ -750,6 +758,8 @@ class IncidentService:
         db_alert_sevs = list(res_sevs.scalars().all())
 
         stmt_inc_sev = select(Incident.severity).where(Incident.id == incident.id)
+        if _is_postgresql(session):
+            stmt_inc_sev = stmt_inc_sev.with_for_update()
         res_inc_sev = await _execute(session, stmt_inc_sev)
         latest_inc_sev = res_inc_sev.scalar() or incident.severity
 
