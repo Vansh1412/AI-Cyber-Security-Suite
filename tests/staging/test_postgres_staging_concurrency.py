@@ -306,10 +306,10 @@ async def test_100_concurrent_alert_attachments(pg_session_factory):
                 title=f"Concurrent Alert {i}",
                 description=f"Synthetic alert {i}",
                 severity=sev,
-                status="NEW",
+                status="OPEN",
+                rule_name="CONCURRENCY_TEST",
                 indicator_type="DOMAIN",
                 indicator_value=f"phish-{i}.example.com",
-                source="TEST_CONCURRENCY",
             )
             session.add(alert)
             await session.flush()
