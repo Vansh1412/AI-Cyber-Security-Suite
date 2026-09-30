@@ -9,8 +9,8 @@ progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -24,19 +24,19 @@ See: `.planning/PROJECT.md` (updated 2026-09-30)
 
 ## Current Position
 
-Phase: 07 (production-hardening-staging-parity) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 07
-Last activity: 2026-09-30 -- Phase 07 execution started
+Phase: 07 (production-hardening-staging-parity) — EXECUTING  
+Plan: 2 of 3 (07-01 complete; executing 07-02)  
+Status: Executing Phase 07 Wave 2  
+Last activity: 2026-09-30 -- Plan 07-01 complete
 
-Progress: [████████░░] 85%
+Progress: [████████░░] 88%
 
 ## Performance Metrics
 
 **Milestone Progress:**
 
 - Completed phases: 6 / 7
-- Test coverage: 575 passing tests across unit, integration, and staging suites
+- Test coverage: 579 passing tests across unit, integration, and staging suites
 
 ## Accumulated Context
 
@@ -50,6 +50,10 @@ Decisions logged in `.planning/PROJECT.md`:
 - `DEC-004`: Transactional Outbox Pattern for decoupled, resilient multi-channel notifications.
 - `DEC-005`: Public Suffix List (PSL) aware domain normalization for deterministic alert correlation.
 - `DEC-006`: Reversible dynamic containment actions with atomic rollback capability.
+- `DEC-007` (D-09): Production Docker Compose overlay with memory/CPU caps and python health checks.
+- `DEC-008` (D-10): Regex unbuffered SSE proxy routing in Nginx.
+- `DEC-009` (D-11): Decoupled liveness (no I/O) and readiness probes (Postgres 2s, Redis 1s).
+- `DEC-010` (D-12): Removal of unused pyarrow dependency.
 
 ### Pending Todos
 
