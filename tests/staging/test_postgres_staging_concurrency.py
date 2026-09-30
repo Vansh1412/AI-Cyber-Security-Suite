@@ -415,8 +415,9 @@ async def test_concurrent_monitoring_lease_claims(pg_session_factory):
         for i in range(10):
             tgt = MonitoringTarget(
                 url=f"https://target-{i}.example.com",
+                normalized_domain=f"target-{i}.example.com",
                 is_active=True,
-                interval_seconds=60,
+                check_interval_minutes=60,
                 user_id=1,
                 execution_token=None,
             )

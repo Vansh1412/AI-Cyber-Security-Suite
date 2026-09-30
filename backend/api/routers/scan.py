@@ -11,7 +11,6 @@ POST /v1/scan
 - Zero-Day URL logging (Sprint 2)
 """
 
-from __future__ import annotations
 
 import time
 
@@ -27,6 +26,7 @@ from backend.api.dependencies import (
 )
 from backend.database.models import ScanResult, User
 from backend.schemas.payload import ScanRequest, ScanResponse
+from backend.core.rate_limit import limiter
 from backend.services.cache import cache_service
 from backend.services.explainer import ExplainerService
 from backend.services.feature_eng import FeatureService
@@ -99,6 +99,7 @@ async def _verify_and_evaluate_retrain(
 
 
 @router.post("/scan", response_model=ScanResponse, tags=["Scanning"])
+@limiter.limit("100/minute")
 async def scan_url(
     request: Request,  # Required by SlowAPI
     background_tasks: BackgroundTasks,
@@ -116,10 +117,6 @@ async def scan_url(
     """
     # 0. Set state for dynamic rate limiting
     request.state.user = current_user
-
-    # We invoke the limiter manually here inside the route, since we need dynamic limits
-    limiter = request.app.state.limiter
-    limiter._check_request_limit(request, endpoint_name="scan_url", limit_value=limit_by_role(request))
 
     if not payload.url or not payload.url.strip():
         raise HTTPException(status_code=422, detail="URL cannot be empty.")
