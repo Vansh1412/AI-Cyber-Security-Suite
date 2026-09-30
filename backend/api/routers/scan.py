@@ -24,9 +24,9 @@ from backend.api.dependencies import (
     get_optional_user,
     get_prediction_service,
 )
+from backend.core.rate_limit import limiter
 from backend.database.models import ScanResult, User
 from backend.schemas.payload import ScanRequest, ScanResponse
-from backend.core.rate_limit import limiter
 from backend.services.cache import cache_service
 from backend.services.explainer import ExplainerService
 from backend.services.feature_eng import FeatureService
