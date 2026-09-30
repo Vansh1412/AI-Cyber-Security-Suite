@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/architecture/sprint5_phase5d_arch_spec_v1_1.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Sprint 5 Phase 5D Architecture Spec v1.1: Notification Engine",
+  "summary": "Earlier draft specification for multi-channel notifications and dispatcher.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "SPEC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

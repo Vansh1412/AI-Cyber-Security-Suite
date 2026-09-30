@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/api/README.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "API Documentation Overview",
+  "summary": "Overview of the backend API architecture, Swagger UI endpoints, and client usage.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "DOC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

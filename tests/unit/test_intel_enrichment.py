@@ -11,9 +11,7 @@ mocked. Zero real outbound requests are made during test execution.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import socket
-import ssl
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -33,7 +31,6 @@ from backend.services.intel_enrichment import (
     get_ip_geolocation,
     get_tls_info,
 )
-
 
 # ── 1. SSRF IP & Network Blocklist Tests ──────────────────────────────────────
 

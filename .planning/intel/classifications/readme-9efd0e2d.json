@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/README.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "AI Cyber Security Suite",
+  "summary": "Master project documentation including system overview, architecture, feature highlights, and developer quick start.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "DOC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

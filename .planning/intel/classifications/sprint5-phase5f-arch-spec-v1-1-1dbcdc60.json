@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/architecture/sprint5_phase5f_arch_spec_v1_1.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Sprint 5 Phase 5F Architecture Spec v1.1: SOC Dynamic Containment",
+  "summary": "Architectural specification for SOC containment actions, playbooks, dynamic blacklisting, and auto-remediation.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "SPEC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

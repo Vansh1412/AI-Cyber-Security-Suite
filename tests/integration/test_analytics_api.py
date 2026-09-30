@@ -15,7 +15,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from backend.api.dependencies import (
@@ -27,7 +26,6 @@ from backend.api.dependencies import (
 )
 from backend.database.models import ScanResult, User
 from backend.main import app
-
 
 # ── Test Fixtures & Mock Generators ───────────────────────────────────────────
 

@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/architecture/sprint5_next_phase_architecture_v1_0.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Sprint 5 Architecture Roadmap: Full SOC Operations Architecture",
+  "summary": "Comprehensive architectural roadmap defining Event Engine, Correlation Engine, Incidents, Monitoring, and Containment.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "SPEC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

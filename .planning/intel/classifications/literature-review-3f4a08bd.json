@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/research/LITERATURE_REVIEW.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Literature Review: Phishing Detection",
+  "summary": "Academic literature review and state-of-the-art survey for URL phishing classification algorithms.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "DOC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

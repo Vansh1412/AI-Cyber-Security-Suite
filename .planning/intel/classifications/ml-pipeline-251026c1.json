@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/ML_PIPELINE.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Machine Learning Pipeline Guide",
+  "summary": "Documentation of the feature engineering pipeline, XGBoost calibration, SHAP explainability, and retraining.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "DOC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/DEPLOYMENT.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Deployment Guide",
+  "summary": "Deployment procedures, Docker compose environments, production configurations, and health checks.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "DOC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

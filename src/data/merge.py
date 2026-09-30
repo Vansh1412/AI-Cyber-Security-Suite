@@ -20,7 +20,7 @@ Usage:
 import pandas as pd
 from tabulate import tabulate
 
-from src.config import PROCESSED_DIR, MERGED_DATASET, SCHEMA_COLUMNS
+from src.config import MERGED_DATASET, PROCESSED_DIR, SCHEMA_COLUMNS
 from src.utils.logger import logger
 
 

@@ -30,15 +30,14 @@ import pandas as pd
 from tqdm import tqdm
 
 from src.config import (
-    PHISHING_DIR,
-    LEGITIMATE_DIR,
-    PROCESSED_DIR,
-    URL_COLUMN_ALIASES,
     LABEL_COLUMN_ALIASES,
+    LEGITIMATE_DIR,
+    PHISHING_DIR,
+    PROCESSED_DIR,
     SCHEMA_COLUMNS,
+    URL_COLUMN_ALIASES,
 )
 from src.utils.logger import logger
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

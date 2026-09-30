@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 from tabulate import tabulate
 
-from src.config import PHISHING_DIR, LEGITIMATE_DIR, REPORT_DIR
+from src.config import LEGITIMATE_DIR, PHISHING_DIR, REPORT_DIR
 from src.utils.logger import logger
 
 

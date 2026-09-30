@@ -1,0 +1,16 @@
+{
+  "source_path": "E:/AI-Cyber-Security-Suite/docs/architecture/sprint5_phase5e_arch_spec_v1_1.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Sprint 5 Phase 5E Architecture Spec v1.1: Real-Time Event Broadcaster & SSE Gateway",
+  "summary": "Architectural specification for real-time SSE event broadcasting, multi-pod Redis fanout, and stream ticketing.",
+  "scope": [
+    "AI Cyber Security Suite",
+    "SPEC"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}
