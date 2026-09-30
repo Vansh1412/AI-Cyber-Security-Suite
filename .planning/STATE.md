@@ -9,8 +9,8 @@ progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 66
 ---
 
 # Project State
@@ -25,18 +25,18 @@ See: `.planning/PROJECT.md` (updated 2026-09-30)
 ## Current Position
 
 Phase: 07 (production-hardening-staging-parity) — EXECUTING  
-Plan: 2 of 3 (07-01 complete; executing 07-02)  
-Status: Executing Phase 07 Wave 2  
-Last activity: 2026-09-30 -- Plan 07-01 complete
+Plan: 3 of 3 (07-01 and 07-02 complete; executing 07-03)  
+Status: Executing Phase 07 Wave 3  
+Last activity: 2026-10-01 -- Plan 07-02 complete
 
-Progress: [████████░░] 88%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
 **Milestone Progress:**
 
 - Completed phases: 6 / 7
-- Test coverage: 579 passing tests across unit, integration, and staging suites
+- Test coverage: 582 passing tests across unit, integration, and staging suites
 
 ## Accumulated Context
 
@@ -54,6 +54,9 @@ Decisions logged in `.planning/PROJECT.md`:
 - `DEC-008` (D-10): Regex unbuffered SSE proxy routing in Nginx.
 - `DEC-009` (D-11): Decoupled liveness (no I/O) and readiness probes (Postgres 2s, Redis 1s).
 - `DEC-010` (D-12): Removal of unused pyarrow dependency.
+- `DEC-011` (D-01/D-02): Dual-mode staging test harness with pool_size=20/max_overflow=30 and table cleanup.
+- `DEC-012` (D-03): Row-level locking with with_for_update() on PostgreSQL to prevent lost updates in attach_alerts.
+- `DEC-013` (D-04): In-memory degradation fallback preventing HTTP 500 errors during Redis outages.
 
 ### Pending Todos
 
