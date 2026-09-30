@@ -87,6 +87,8 @@ temp/
 
 # ── ML / Data Science ────────────────────────────────────────────────────────
 *.pkl
+# Production champion model artifact — tracked in git so CI and deployments have it
+!ml/models/store/xgboost_calibrated.pkl
 *.joblib
 *.h5
 *.hdf5
