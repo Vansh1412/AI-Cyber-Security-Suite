@@ -509,12 +509,36 @@ async def test_pipeline_o_tenant_isolation(session_factory, tenant_a, tenant_b, 
 
 # ── Critical Concurrency Tests ─────────────────────────────────────────────────
 
+def _get_sync_postgres_url(url: str) -> str:
+    """Normalize a PostgreSQL connection URL to use psycopg for synchronous connections."""
+    if not url:
+        return ""
+    if url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
 def _is_postgres_available() -> bool:
-    pg_url = os.getenv("TEST_POSTGRES_URL")
-    if not pg_url:
+    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("TEST_POSTGRES_URL")
+    if not raw_url or "postgresql" not in raw_url:
         return False
     try:
-        test_eng = create_engine(pg_url)
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(raw_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        with socket.create_connection((host, port), timeout=1.5):
+            pass
+    except Exception:
+        return False
+
+    sync_url = _get_sync_postgres_url(raw_url)
+    try:
+        test_eng = create_engine(sync_url, connect_args={"connect_timeout": 2})
         with test_eng.connect() as conn:
             conn.execute(select(1))
         test_eng.dispose()
@@ -724,7 +748,9 @@ def test_postgresql_100_concurrent_workers():
       - Zero duplicate incidents
       - Zero cross-user leakage
     """
-    pg_url = os.getenv("TEST_POSTGRES_URL")
+    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("TEST_POSTGRES_URL")
+    assert raw_url is not None
+    pg_url = _get_sync_postgres_url(raw_url)
     pg_eng = create_engine(pg_url, pool_size=30, max_overflow=20)
     Base.metadata.create_all(pg_eng)
     SessionFactory = sessionmaker(bind=pg_eng)

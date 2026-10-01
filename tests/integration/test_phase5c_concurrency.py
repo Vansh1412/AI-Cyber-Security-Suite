@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -63,10 +63,42 @@ def _is_postgres_available() -> bool:
     if not url or "postgresql" not in url:
         return False
     try:
-        from sqlalchemy import create_engine
-        engine = create_engine(url, connect_args={"connect_timeout": 2})
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        with socket.create_connection((host, port), timeout=1.5):
+            pass
+    except Exception:
+        return False
+
+    try:
+        import asyncio
+
+        import asyncpg
+        clean_url = url
+        if clean_url.startswith("postgresql+asyncpg://"):
+            clean_url = clean_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        elif clean_url.startswith("postgresql+psycopg://"):
+            clean_url = clean_url.replace("postgresql+psycopg://", "postgresql://", 1)
+
+        async def _ping():
+            conn = await asyncpg.connect(clean_url, timeout=2.0)
+            await conn.close()
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                ex.submit(asyncio.run, _ping()).result(timeout=3.0)
+        else:
+            asyncio.run(_ping())
         return True
     except Exception:
         return False
@@ -363,21 +395,33 @@ async def test_postgres_row_locking_concurrency():
     engine = create_async_engine(url)
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession)
 
-    alert_uuid = await _seed_open_alert(session_factory, user_id=1)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-    async def _worker():
         async with session_factory() as s:
-            u = (await s.execute(select(User).where(User.id == 1))).scalar_one()
-            return await alert_service.acknowledge_alert(s, alert_uuid, u)
+            u = await s.get(User, 1)
+            if not u:
+                s.add(User(id=1, email="conc_pg_u1@test.com", hashed_pw="pw1", role="user", is_active=True))
+                await s.commit()
 
-    results = await asyncio.gather(*[_worker() for _ in range(50)])
+        alert_uuid = await _seed_open_alert(session_factory, user_id=1)
 
-    assert len(results) == 50
-    async with session_factory() as s:
-        audit_count = (await s.execute(
-            select(func.count(AuditEvent.id)).where(
-                AuditEvent.resource_id == alert_uuid,
-                AuditEvent.action == "ALERT_ACKNOWLEDGED",
-            )
-        )).scalar()
-        assert audit_count == 1
+        async def _worker():
+            async with session_factory() as s:
+                u = (await s.execute(select(User).where(User.id == 1))).scalar_one()
+                return await alert_service.acknowledge_alert(s, alert_uuid, u)
+
+        results = await asyncio.gather(*[_worker() for _ in range(50)])
+
+        assert len(results) == 50
+        async with session_factory() as s:
+            audit_count = (await s.execute(
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.resource_id == alert_uuid,
+                    AuditEvent.action == "ALERT_ACKNOWLEDGED",
+                )
+            )).scalar()
+            assert audit_count == 1
+    finally:
+        await engine.dispose()

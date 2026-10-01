@@ -42,6 +42,7 @@ httpx
 # ── Database ──────────────────────────────────────────────────────────────────
 sqlalchemy[asyncio]
 asyncpg
+psycopg[binary]
 aiosqlite
 alembic
 

@@ -21,6 +21,47 @@ jobs:
         working-directory: backend
         run: pytest ../tests/ -v
 
+  staging-postgres-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cyber_soc_staging
+          POSTGRES_USER: soc_admin
+          POSTGRES_PASSWORD: staging_secure_password_123!
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U soc_admin -d cyber_soc_staging"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run PostgreSQL staging concurrency tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://soc_admin:staging_secure_password_123!@localhost:5433/cyber_soc_staging
+          TEST_POSTGRES_URL: postgresql+psycopg://soc_admin:staging_secure_password_123!@localhost:5433/cyber_soc_staging
+        run: |
+          pytest \
+            tests/staging/test_postgres_staging_concurrency.py::test_postgres_version_16 \
+            tests/staging/test_postgres_staging_concurrency.py::test_postgres_advisory_lock_leader_election \
+            tests/staging/test_postgres_staging_concurrency.py::test_skip_locked_outbox_claiming \
+            tests/staging/test_postgres_staging_concurrency.py::test_monotonic_epoch_fencing \
+            tests/staging/test_postgres_staging_concurrency.py::test_100_concurrent_alert_attachments \
+            tests/staging/test_postgres_staging_concurrency.py::test_parallel_incident_status_transitions \
+            tests/staging/test_postgres_staging_concurrency.py::test_concurrent_monitoring_lease_claims \
+            tests/integration/test_phase5c_concurrency.py::test_postgres_row_locking_concurrency \
+            tests/integration/test_monitoring_pipeline.py::test_postgresql_100_concurrent_workers \
+            -v
+
   frontend-tests:
     runs-on: ubuntu-latest
     steps:
