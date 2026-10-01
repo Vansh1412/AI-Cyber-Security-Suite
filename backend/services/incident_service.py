@@ -129,6 +129,13 @@ async def _commit(session: Session | AsyncSession):
         session.commit()
 
 
+async def _flush(session: Session | AsyncSession):
+    if isinstance(session, AsyncSession):
+        await session.flush()
+    else:
+        session.flush()
+
+
 async def _rollback(session: Session | AsyncSession):
     if isinstance(session, AsyncSession):
         await session.rollback()
@@ -382,7 +389,7 @@ class IncidentService:
 
         async def _do_resolution() -> tuple[Incident, bool]:
             if is_pg:
-                lock_key = f"INCIDENT:{user_id}:{normalized_domain}"
+                lock_key = f"INCIDENT:{user_key}:{normalized_domain}"
                 await _execute(
                     session,
                     text("SELECT pg_advisory_xact_lock(hashtext(:key))").bindparams(key=lock_key),
@@ -436,8 +443,7 @@ class IncidentService:
                 updated_at=now,
             )
             session.add(new_inc)
-            await _commit(session)
-            await _refresh(session, new_inc)
+            await _flush(session)
 
             if initial_alert_id:
                 alert_stmt = select(Alert).where(Alert.id == initial_alert_id)
@@ -445,8 +451,6 @@ class IncidentService:
                 alert_obj = alert_res.scalars().first() if hasattr(alert_res, "scalars") else None
                 if alert_obj:
                     alert_obj.incident_id = new_inc.id
-                    await _commit(session)
-                    await _refresh(session, new_inc)
 
             await self._audit(
                 session=session,
