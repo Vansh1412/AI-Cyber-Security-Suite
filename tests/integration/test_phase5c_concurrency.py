@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -392,7 +392,12 @@ async def test_postgres_row_locking_concurrency():
     """
     url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
     assert url is not None
-    engine = create_async_engine(url)
+    engine = create_async_engine(
+        url,
+        pool_size=30,
+        max_overflow=25,
+        pool_timeout=45,
+    )
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession)
 
     try:
@@ -400,16 +405,19 @@ async def test_postgres_row_locking_concurrency():
             await conn.run_sync(Base.metadata.create_all)
 
         async with session_factory() as s:
-            u = await s.get(User, 1)
+            u = (await s.execute(select(User).limit(1))).scalar_one_or_none()
             if not u:
-                s.add(User(id=1, email="conc_pg_u1@test.com", hashed_pw="pw1", role="user", is_active=True))
+                u = User(email=f"conc_pg_{uuid.uuid4().hex[:8]}@test.com", hashed_pw="pw1", role="user", is_active=True)
+                s.add(u)
                 await s.commit()
+                await s.refresh(u)
+            user_id = u.id
 
-        alert_uuid = await _seed_open_alert(session_factory, user_id=1)
+        alert_uuid = await _seed_open_alert(session_factory, user_id=user_id)
 
         async def _worker():
             async with session_factory() as s:
-                u = (await s.execute(select(User).where(User.id == 1))).scalar_one()
+                u = (await s.execute(select(User).where(User.id == user_id))).scalar_one()
                 return await alert_service.acknowledge_alert(s, alert_uuid, u)
 
         results = await asyncio.gather(*[_worker() for _ in range(50)])
@@ -424,4 +432,9 @@ async def test_postgres_row_locking_concurrency():
             )).scalar()
             assert audit_count == 1
     finally:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1));"))
+        except Exception:
+            pass
         await engine.dispose()

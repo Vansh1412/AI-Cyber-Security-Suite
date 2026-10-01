@@ -37,7 +37,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -757,6 +757,12 @@ def test_postgresql_100_concurrent_workers():
 
     setup_sess = SessionFactory()
     try:
+        try:
+            setup_sess.execute(text("SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1));"))
+            setup_sess.commit()
+        except Exception:
+            setup_sess.rollback()
+
         tenant_a = User(
             email=f"pg_concur_a_{uuid.uuid4().hex[:8]}@example.com",
             hashed_pw="hash_a",

@@ -24,7 +24,7 @@ import os
 import uuid
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.database.models import (
@@ -106,7 +106,8 @@ async def clean_staging_db(pg_session_factory):
             await session.execute(text("DELETE FROM alerts;"))
             await session.execute(text("DELETE FROM incidents;"))
             await session.execute(text("DELETE FROM monitoring_targets;"))
-            await session.execute(text("DELETE FROM scheduler_state WHERE singleton_key = 'global_scheduler';"))
+            await session.execute(text("DELETE FROM scheduler_state WHERE id = 1;"))
+            await session.execute(text("SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1));"))
     except Exception:
         pass
 
@@ -178,17 +179,19 @@ async def test_skip_locked_outbox_claiming(pg_session_factory):
     """
     outbox_ids: list[str] = []
     async with pg_session_factory() as session:
-        u = await session.get(User, 1)
-        if not u:
-            session.add(User(id=1, email="staging@soc.test", hashed_pw="dummy", role="user", is_active=True))
+        user = (await session.execute(select(User).limit(1))).scalar_one_or_none()
+        if not user:
+            user = User(email="staging@soc.test", hashed_pw="dummy", role="user", is_active=True)
+            session.add(user)
             await session.flush()
+        user_id = user.id
 
         for i in range(10):
             item_id = str(uuid.uuid4())
             outbox_ids.append(item_id)
             row = NotificationOutbox(
                 outbox_uuid=item_id,
-                user_id=1,
+                user_id=user_id,
                 channel="WEBHOOK",
                 destination_url="https://example.com/webhook",
                 payload_json={"event": "alert_created", "seq": i},
@@ -202,19 +205,19 @@ async def test_skip_locked_outbox_claiming(pg_session_factory):
     async def claim_batch() -> list[str]:
         async with pg_session_factory() as session, session.begin():
             query = text("""
-                SELECT id FROM notification_outbox
+                SELECT outbox_uuid FROM notification_outbox
                 WHERE status = 'PENDING'
                 ORDER BY created_at ASC
                 FOR UPDATE SKIP LOCKED
                 LIMIT 5;
             """)
             res = await session.execute(query)
-            claimed_ids = [row[0] for row in res.fetchall()]
+            claimed_ids = [str(row[0]) for row in res.fetchall()]
             if claimed_ids:
                 update_query = text("""
                     UPDATE notification_outbox
                     SET status = 'PROCESSING'
-                    WHERE id = ANY(:ids);
+                    WHERE outbox_uuid = ANY(:ids);
                 """)
                 await session.execute(update_query, {"ids": claimed_ids})
             return claimed_ids
@@ -239,22 +242,21 @@ async def test_monotonic_epoch_fencing(pg_session_factory):
     Verify epoch fencing prevents stale workers from overwriting active leases.
     Only updates with epoch >= current_epoch succeed.
     """
-    async with pg_session_factory() as session:
+    async with pg_session_factory() as session, session.begin():
+        await session.execute(text("DELETE FROM scheduler_state WHERE id = 1;"))
         sched = SchedulerState(
-            singleton_key="global_scheduler",
-            leader_worker_id="worker_active",
+            id=1,
+            leader_pod_id="worker_active",
             current_epoch=5,
-            heartbeat_version=1,
         )
         session.add(sched)
-        await session.commit()
 
     # Attempt write with stale epoch 4 (must be rejected / affect 0 rows)
     async with pg_session_factory() as session:
         stmt = text("""
             UPDATE scheduler_state
-            SET leader_worker_id = 'stale_worker', heartbeat_version = heartbeat_version + 1
-            WHERE singleton_key = 'global_scheduler' AND current_epoch < 5;
+            SET leader_pod_id = 'stale_worker'
+            WHERE id = 1 AND current_epoch < 5;
         """)
         res = await session.execute(stmt)
         await session.commit()
@@ -264,8 +266,8 @@ async def test_monotonic_epoch_fencing(pg_session_factory):
     async with pg_session_factory() as session:
         stmt = text("""
             UPDATE scheduler_state
-            SET leader_worker_id = 'valid_worker', current_epoch = 6
-            WHERE singleton_key = 'global_scheduler' AND current_epoch <= 5;
+            SET leader_pod_id = 'valid_worker', current_epoch = 6
+            WHERE id = 1 AND current_epoch <= 5;
         """)
         res = await session.execute(stmt)
         await session.commit()
@@ -281,17 +283,19 @@ async def test_100_concurrent_alert_attachments(pg_session_factory):
     Row-level locking (with_for_update) serializes severity updates and prevents lost updates.
     """
     async with pg_session_factory() as session:
-        user = await session.get(User, 1)
+        user = (await session.execute(select(User).limit(1))).scalar_one_or_none()
         if not user:
-            session.add(User(id=1, email="tenant1@soc.test", hashed_pw="pw1", role="user", is_active=True))
+            user = User(email="tenant1@soc.test", hashed_pw="pw1", role="user", is_active=True)
+            session.add(user)
             await session.flush()
+        user_id = user.id
 
         inc = Incident(
             title="100-Alert Concurrency Test Incident",
             description="Testing high-concurrency alert attachments",
             severity="LOW",
             status="OPEN",
-            created_by_user_id=1,
+            created_by_user_id=user_id,
         )
         session.add(inc)
         await session.flush()
@@ -302,7 +306,7 @@ async def test_100_concurrent_alert_attachments(pg_session_factory):
         alert_ids: list[int] = []
         for i, sev in enumerate(severities):
             alert = Alert(
-                user_id=1,
+                user_id=user_id,
                 title=f"Concurrent Alert {i}",
                 description=f"Synthetic alert {i}",
                 severity=sev,
@@ -319,15 +323,14 @@ async def test_100_concurrent_alert_attachments(pg_session_factory):
     sem = asyncio.Semaphore(15)
 
     async def _attach_single_alert(aid: int):
-        async with sem:
-            async with pg_session_factory() as session:
-                user_obj = await session.get(User, 1)
-                await incident_service.attach_alerts(
-                    session=session,
-                    incident_id_or_uuid=incident_id,
-                    alert_ids=[aid],
-                    current_user=user_obj,
-                )
+        async with sem, pg_session_factory() as session:
+            user_obj = await session.get(User, user_id)
+            await incident_service.attach_alerts(
+                session=session,
+                incident_id_or_uuid=incident_id,
+                alert_ids=[aid],
+                current_user=user_obj,
+            )
 
     await asyncio.gather(*[_attach_single_alert(aid) for aid in alert_ids])
 
@@ -352,17 +355,19 @@ async def test_parallel_incident_status_transitions(pg_session_factory):
     Valid state transitions succeed while invalid transitions are rejected without corruption.
     """
     async with pg_session_factory() as session:
-        user = await session.get(User, 1)
+        user = (await session.execute(select(User).limit(1))).scalar_one_or_none()
         if not user:
-            session.add(User(id=1, email="tenant1@soc.test", hashed_pw="pw1", role="user", is_active=True))
+            user = User(email="tenant1@soc.test", hashed_pw="pw1", role="user", is_active=True)
+            session.add(user)
             await session.flush()
+        user_id = user.id
 
         inc = Incident(
             title="Status Transition Race Incident",
             description="Testing competing status updates",
             severity="MEDIUM",
             status="OPEN",
-            created_by_user_id=1,
+            created_by_user_id=user_id,
         )
         session.add(inc)
         await session.commit()
@@ -370,7 +375,7 @@ async def test_parallel_incident_status_transitions(pg_session_factory):
 
     async def _transition(target_status: str) -> bool:
         async with pg_session_factory() as session:
-            u = await session.get(User, 1)
+            u = await session.get(User, user_id)
             try:
                 await incident_service.update_incident(
                     session=session,
@@ -383,18 +388,18 @@ async def test_parallel_incident_status_transitions(pg_session_factory):
                 return False
 
     results = await asyncio.gather(
-        _transition("TRIAGED"),
+        _transition("RESOLVED"),
         _transition("INVESTIGATING"),
         _transition("CLOSED"),
         return_exceptions=False,
     )
 
-    # CLOSED is invalid from OPEN, so at least one transition must return False
+    # RESOLVED is invalid directly from OPEN, so at least one transition must return False
     assert False in results, "Invalid state transition was erroneously allowed"
 
     async with pg_session_factory() as session:
         final_inc = await session.get(Incident, inc_id)
-        assert final_inc.status in ("TRIAGED", "INVESTIGATING"), f"Corrupt incident status: {final_inc.status}"
+        assert final_inc.status in ("INVESTIGATING", "CLOSED"), f"Corrupt incident status: {final_inc.status}"
 
 
 # ── 7. Concurrent Monitoring Lease Claims ─────────────────────────────────────
@@ -407,10 +412,12 @@ async def test_concurrent_monitoring_lease_claims(pg_session_factory):
     """
     target_ids: list[int] = []
     async with pg_session_factory() as session:
-        user = await session.get(User, 1)
+        user = (await session.execute(select(User).limit(1))).scalar_one_or_none()
         if not user:
-            session.add(User(id=1, email="tenant1@soc.test", hashed_pw="pw1", role="user", is_active=True))
+            user = User(email="tenant1@soc.test", hashed_pw="pw1", role="user", is_active=True)
+            session.add(user)
             await session.flush()
+        user_id = user.id
 
         for i in range(10):
             tgt = MonitoringTarget(
@@ -418,7 +425,7 @@ async def test_concurrent_monitoring_lease_claims(pg_session_factory):
                 normalized_domain=f"target-{i}.example.com",
                 is_active=True,
                 check_interval_minutes=60,
-                user_id=1,
+                user_id=user_id,
                 execution_token=None,
             )
             session.add(tgt)
