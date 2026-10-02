@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **JWT Authentication** — secure token-based auth with bcrypt password hashing.
 
 ### Security
-- CORS restricted to configured origins in production.
+- CORS restricted to configured origins (`CORS_ORIGINS`) with `allow_credentials=False` for Bearer token authentication.
 - No secrets committed; all credentials are environment-variable-driven.
 - Rate limits prevent API abuse against the inference engine.
 

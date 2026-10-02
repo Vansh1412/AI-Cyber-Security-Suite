@@ -17,16 +17,6 @@
 
 ---
 
-## 📸 Preview
-
-| Extension Popup | Dashboard Analytics | Threat Report |
-|:---:|:---:|:---:|
-| ![Extension](docs/diagrams/extension-preview.png) | ![Dashboard](docs/diagrams/dashboard-preview.png) | ![Report](docs/diagrams/report-preview.png) |
-
-> **Replace these placeholders** with real screenshots before publishing.
-
----
-
 ## ✨ Features
 
 | Feature | Description |
@@ -131,8 +121,8 @@ See [docs/ML_PIPELINE.md](docs/ML_PIPELINE.md) for full details.
 ### 1. Clone
 
 ```bash
-git clone https://github.com/yourusername/ai-cyber-security-suite.git
-cd ai-cyber-security-suite
+git clone https://github.com/Vansh1412/AI-Cyber-Security-Suite.git
+cd AI-Cyber-Security-Suite
 ```
 
 ### 2. Backend
@@ -318,7 +308,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 Built with ❤️ as a portfolio project demonstrating full-stack AI security engineering.
 
-- GitHub: [@yourusername](https://github.com/Vansh1412)
+- GitHub: [@Vansh1412](https://github.com/Vansh1412)
 
 ---
 

@@ -9,7 +9,9 @@ All values can be overridden by environment variables or a .env file.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -18,6 +20,23 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Cyber Security Suite API"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/v1"
+
+    # ── CORS ──────────────────────────────────────────────────────────────────
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",") if i.strip()]
+        return v
 
     # ── Security / JWT ────────────────────────────────────────────────────────
     SECRET_KEY: str = "changeme-use-a-long-random-secret-in-production"
